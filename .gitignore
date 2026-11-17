@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.env*
+*.jks
+*.keystore
+secrets/
+floorplan/
+*.log
