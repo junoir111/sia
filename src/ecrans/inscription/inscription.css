@@ -1,0 +1,31 @@
+/* E3 Créer mon compte — mesures de la maquette E3-inscription.jpg */
+.inscription__titre {
+  margin: 8px 0 24px;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.inscription__formulaire {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.inscription__champs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inscription__case {
+  margin-top: 4px;
+}
+
+.inscription__bas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 24px;
+}

@@ -1,0 +1,263 @@
+/* Composants partagés de SIA (src/ui). Mesures : maquette planche-inscription.jpg. */
+
+/* --- Boutons --- */
+.bouton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--sia-hauteur-bouton);
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: var(--sia-rayon-rond);
+  font-size: var(--sia-corps);
+  line-height: 1.25;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bouton:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.bouton:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bouton--principal {
+  background: var(--sia-accent);
+  color: var(--sia-sur-accent);
+  font-weight: 600;
+}
+
+.bouton--principal:disabled {
+  background: var(--sia-carte);
+  border-color: var(--sia-ligne);
+  color: var(--sia-eteint);
+  cursor: not-allowed;
+}
+
+.bouton--principal[aria-busy='true'] {
+  cursor: progress;
+}
+
+.bouton--secondaire {
+  background: transparent;
+  border-color: var(--sia-contour);
+  color: var(--sia-texte);
+  font-weight: 500;
+}
+
+.bouton--secondaire:active {
+  background: var(--sia-carte);
+}
+
+/* --- Champ --- */
+.champ {
+  display: flex;
+  flex-direction: column;
+}
+
+.champ__libelle {
+  margin-bottom: 8px;
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.champ__cadre {
+  position: relative;
+}
+
+.champ__saisie {
+  display: block;
+  width: 100%;
+  height: var(--sia-hauteur-bouton);
+  padding: 0 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+  font-size: var(--sia-corps);
+  caret-color: var(--sia-accent);
+  outline: none;
+  transition:
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.champ__saisie--oeil {
+  padding-right: 52px;
+}
+
+/* Points du mot de passe espacés comme sur la maquette. */
+.champ__saisie[type='password'] {
+  letter-spacing: 4px;
+}
+
+.champ__saisie:focus {
+  border-color: var(--sia-accent);
+  box-shadow: inset 0 0 0 0.5px var(--sia-accent);
+}
+
+.champ__saisie[aria-invalid='true'] {
+  border-color: var(--sia-alerte);
+  box-shadow: inset 0 0 0 0.5px var(--sia-alerte);
+}
+
+.champ__oeil {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-carte);
+  color: var(--sia-texte-doux);
+  cursor: pointer;
+}
+
+.champ__oeil:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -4px;
+}
+
+.champ__aide,
+.message-erreur {
+  margin: 8px 0 0;
+  font-size: var(--sia-aide);
+  line-height: 18px;
+}
+
+.champ__aide {
+  color: var(--sia-texte-doux);
+}
+
+.message-erreur {
+  display: flex;
+  gap: 4px;
+  color: var(--sia-alerte);
+  font-weight: 500;
+}
+
+.message-erreur__icone {
+  flex: none;
+  margin-top: 1px;
+}
+
+.message-erreur__ligne {
+  display: block;
+}
+
+/* --- Case à cocher --- */
+.case {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--sia-toucher);
+  cursor: pointer;
+}
+
+.case__saisie {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.case__boite {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--sia-case);
+  border-radius: 6px;
+  color: var(--sia-sur-accent);
+  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.case__coche {
+  visibility: hidden;
+}
+
+.case__saisie:checked + .case__boite {
+  background: var(--sia-accent);
+  border-color: var(--sia-accent);
+}
+
+.case__saisie:checked + .case__boite .case__coche {
+  visibility: visible;
+}
+
+.case__saisie:focus-visible + .case__boite {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.case__saisie[aria-invalid='true'] + .case__boite {
+  border-color: var(--sia-alerte);
+}
+
+/* --- Bandeau --- */
+.bandeau {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.bandeau__icone {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sia-alerte);
+}
+
+/* --- Flèche retour (zone de 48 px) --- */
+.retour {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  margin-left: -12px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte);
+  cursor: pointer;
+}
+
+.retour:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -2px;
+}
+
+.retour:active {
+  background: var(--sia-carte);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bouton,
+  .champ__saisie,
+  .case__boite {
+    transition: none;
+  }
+}

@@ -1,6 +1,70 @@
+@import './composants.css';
+
+/* Inter (licence OFL, voir polices/OFL.txt), incluse dans l'appli : rien n'est chargé en ligne. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./polices/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./polices/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./polices/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./polices/inter-latin-700-normal.woff2') format('woff2');
+}
+
 :root {
+  /* Couleurs du brief UX/UI (§2) */
   --sia-fond: #0a0f0c;
+  --sia-carte: #101a14;
   --sia-texte: #e6f4ea;
+  --sia-texte-doux: #8fb59c;
+  --sia-accent: #2fd27a;
+  --sia-sur-accent: #04140a;
+  --sia-alerte: #ff6b6b;
+  --sia-ligne: #1e2b23;
+  /* Nuances reprises de la maquette validée (planche-inscription.jpg) */
+  --sia-eteint: #5e7366; /* texte d'un bouton désactivé */
+  --sia-contour: #2e4236; /* contour du bouton secondaire */
+  --sia-case: #4b6354; /* contour d'une case vide */
+
+  /* Mesures du brief (§4) */
+  --sia-marge: 16px;
+  --sia-toucher: 48px;
+  --sia-hauteur-bouton: 52px;
+  --sia-rayon-carte: 14px;
+  --sia-rayon-rond: 999px;
+
+  /* Tailles de texte (§3) */
+  --sia-titre: 22px;
+  --sia-corps: 16px;
+  --sia-libelle: 14px;
+  --sia-aide: 13px;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
@@ -9,18 +73,34 @@ body {
   min-height: 100%;
   background: var(--sia-fond);
   color: var(--sia-texte);
-  font-family: system-ui, sans-serif;
+  font-family: 'Inter', sans-serif;
+  font-size: var(--sia-corps);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
-.accueil {
+::selection {
+  background: var(--sia-accent);
+  color: var(--sia-sur-accent);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* Gabarit commun des écrans : 375 px de référence, marges de 16 px. */
+.ecran {
   display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
   min-height: 100vh;
-  align-items: center;
-  justify-content: center;
-}
-
-.accueil h1 {
-  margin: 0;
-  font-size: 3rem;
-  letter-spacing: 0.2em;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 8px) var(--sia-marge)
+    calc(env(safe-area-inset-bottom) + 16px);
 }

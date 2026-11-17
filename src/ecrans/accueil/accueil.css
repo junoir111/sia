@@ -1,0 +1,58 @@
+/* E1 Accueil — mesures de la maquette E1-accueil.jpg */
+.accueil {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+}
+
+.accueil__centre {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.accueil__nom {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.accueil__lettres {
+  /* 6 px entre les lettres ; la marge négative retire l'espace laissé après le « A ». */
+  letter-spacing: 6px;
+  margin-right: -6px;
+}
+
+.accueil__point {
+  width: 10px;
+  height: 10px;
+  margin-left: 4px;
+  border-radius: var(--sia-rayon-rond);
+  background: var(--sia-accent);
+}
+
+.accueil__phrase {
+  margin: 24px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-corps);
+  line-height: 24px;
+}
+
+.accueil__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accueil__note {
+  margin: 12px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  line-height: 18px;
+  text-align: center;
+}
