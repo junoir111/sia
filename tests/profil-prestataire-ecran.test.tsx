@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
 import { ProfilPrestataire } from '../src/ecrans/profil-prestataire/ProfilPrestataire';
+import { useMatrix } from '../src/coquille/FournisseurMatrix';
+import { monStatutActif, publierStatut, retirerStatut } from '../src/matrix/mur';
 import { enregistrerProfil, lireProfil } from '../src/matrix/profil';
 import { lireSession } from '../src/matrix/session';
 import { ecrireDisponible, lireDisponible } from '../src/appareil/disponible';
@@ -10,6 +12,16 @@ import { ecrireDisponible, lireDisponible } from '../src/appareil/disponible';
 // Jamais le vrai serveur ni le vrai stockage : tout est simulé.
 vi.mock('../src/matrix/profil', () => ({ lireProfil: vi.fn(), enregistrerProfil: vi.fn() }));
 vi.mock('../src/matrix/session', () => ({ lireSession: vi.fn() }));
+vi.mock('../src/coquille/FournisseurMatrix', () => ({ useMatrix: vi.fn() }));
+vi.mock('../src/matrix/mur', () => ({
+  monStatutActif: vi.fn(),
+  publierStatut: vi.fn(),
+  retirerStatut: vi.fn(),
+}));
+vi.mock('../src/matrix/bulles', () => ({
+  ecouterBulles: vi.fn(() => () => undefined),
+  listerBulles: vi.fn(() => []),
+}));
 vi.mock('../src/appareil/disponible', () => ({
   lireDisponible: vi.fn(),
   ecrireDisponible: vi.fn(),
@@ -21,6 +33,7 @@ vi.mock('../src/appareil/photo', () => ({
   effacerPhoto: vi.fn(),
 }));
 
+const CLIENT = { simule: true } as never;
 const SESSION = {
   userId: '@mangue-douce:sia.tail94dc60.ts.net',
   accessToken: 'jeton-test',
@@ -33,6 +46,7 @@ function afficher() {
       <Routes>
         <Route path={CHEMINS.profilPrestataire} element={<ProfilPrestataire />} />
         <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
+        <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -63,6 +77,10 @@ describe('Écran Profil prestataire (E5)', () => {
     vi.mocked(enregistrerProfil).mockReset();
     vi.mocked(lireDisponible).mockReturnValue(false);
     vi.mocked(ecrireDisponible).mockReset();
+    vi.mocked(useMatrix).mockReturnValue({ client: CLIENT, etat: 'pret' });
+    vi.mocked(monStatutActif).mockReset().mockReturnValue(null);
+    vi.mocked(publierStatut).mockReset().mockResolvedValue('$statut');
+    vi.mocked(retirerStatut).mockReset().mockResolvedValue(undefined);
   });
 
   it('affiche le pseudo proposé et le bouton SIA inactif au départ', async () => {
@@ -122,8 +140,14 @@ describe('Écran Profil prestataire (E5)', () => {
     fireEvent.click(boutonSia());
     expect(await screen.findByText('Tu es visible à Akanda.')).toBeInTheDocument();
 
+    const [client, statut] = vi.mocked(publierStatut).mock.calls[0] ?? [];
+    expect(client).toBe(CLIENT);
+    expect(statut).toMatchObject({ pseudo: 'mangue-douce', metier: 'Plombier', zone: 'Akanda' });
+    expect(statut?.fin).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+
     fireEvent.click(boutonSia());
-    expect(screen.getByText("Tu n'es plus visible.")).toBeInTheDocument();
+    expect(await screen.findByText("Tu n'es plus visible.")).toBeInTheDocument();
+    expect(retirerStatut).toHaveBeenCalledWith(CLIENT);
     expect(ecrireDisponible).toHaveBeenLastCalledWith(false);
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
   });
@@ -175,5 +199,48 @@ describe('Écran Profil prestataire (E5)', () => {
       'aria-pressed',
       'true',
     );
+  });
+
+  it('statut encore publié sur le Mur : bouton vert dès l’ouverture', async () => {
+    vi.mocked(lireProfil).mockResolvedValue({
+      ok: true,
+      profil: {
+        version: 1,
+        role: 'prestataire',
+        pseudo: 'mangue',
+        metier: 'Plombier',
+        zone: 'Owendo',
+        modalite: 'deplace',
+        services: [{ label: 'Réparer une fuite', prix: 5000 }],
+      },
+    });
+    vi.mocked(monStatutActif).mockReturnValue({
+      eventId: '$statut',
+      statut: { pseudo: 'mangue', metier: 'Plombier', zone: 'Owendo', fin: Date.now() + 60_000 },
+    });
+    afficher();
+    expect(await screen.findByText('Tu es visible à Owendo.')).toBeInTheDocument();
+    expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('publication du statut impossible (réseau) : bandeau, bouton reste gris', async () => {
+    vi.mocked(enregistrerProfil).mockResolvedValue({ ok: true });
+    vi.mocked(publierStatut).mockRejectedValue(
+      Object.assign(new Error('coupé'), { name: 'ConnectionError' }),
+    );
+    afficher();
+    await attendreChargement();
+    remplir();
+    fireEvent.click(boutonSia());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+    expect(ecrireDisponible).not.toHaveBeenCalled();
+  });
+
+  it('petit accès aux bulles en haut', async () => {
+    afficher();
+    await attendreChargement();
+    fireEvent.click(screen.getByRole('link', { name: 'Bulles' }));
+    expect(screen.getByText('écran bulles')).toBeInTheDocument();
   });
 });

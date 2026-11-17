@@ -9,3 +9,6 @@ export const DUREE_MESSAGE_MS = 60 * SECONDE_MS;
 
 /** Durée maximale d'une annonce sur le Mur. */
 export const DUREE_MAX_ANNONCE_MS = 24 * HEURE_MS;
+
+/** Salon du Mur (alias, l'identifiant interne est retrouvé par le serveur). */
+export const ALIAS_MUR = '#sia-mur:sia.tail94dc60.ts.net';

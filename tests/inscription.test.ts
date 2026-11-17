@@ -45,7 +45,9 @@ describe('verifierInscription', () => {
 
     it('accepte 3 et 30 signes', () => {
       expect(verifierInscription(avec({ identifiant: 'abc' })).identifiant).toBeUndefined();
-      expect(verifierInscription(avec({ identifiant: 'a'.repeat(30) })).identifiant).toBeUndefined();
+      expect(
+        verifierInscription(avec({ identifiant: 'a'.repeat(30) })).identifiant,
+      ).toBeUndefined();
     });
 
     it('refuse plus de 30 signes', () => {

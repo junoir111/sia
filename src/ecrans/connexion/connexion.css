@@ -1,0 +1,27 @@
+/* E2 Se connecter — mêmes mesures que E3 (maquette E3-inscription.jpg) */
+.connexion__titre {
+  margin: 8px 0 24px;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.connexion__formulaire {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.connexion__champs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.connexion__bas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 24px;
+}

@@ -8,6 +8,7 @@ import {
   nettoyerProfil,
   profilComplet,
   pseudoPropose,
+  texteSur,
   verifierProfil,
   type ProfilPrestataire,
   type SaisieProfil,
@@ -26,7 +27,10 @@ const saisieValide: SaisieProfil = {
   ],
 };
 
-const saisie = (changement: Partial<SaisieProfil>): SaisieProfil => ({ ...saisieValide, ...changement });
+const saisie = (changement: Partial<SaisieProfil>): SaisieProfil => ({
+  ...saisieValide,
+  ...changement,
+});
 
 const profilValide: ProfilPrestataire = {
   version: 1,
@@ -40,7 +44,14 @@ const profilValide: ProfilPrestataire = {
 
 describe('LIMITES', () => {
   it('reprend les tailles du schéma PROFIL', () => {
-    expect(LIMITES).toEqual({ pseudo: 30, metier: 40, zone: 40, service: 40, servicesMax: 3, prixMax: 100000000 });
+    expect(LIMITES).toEqual({
+      pseudo: 30,
+      metier: 40,
+      zone: 40,
+      service: 40,
+      servicesMax: 3,
+      prixMax: 100000000,
+    });
   });
 });
 
@@ -122,6 +133,16 @@ describe('verifierProfil', () => {
       },
     });
   });
+  it('refuse un caractère piège dans chaque champ, avec un message clair', () => {
+    const r = verifierProfil(saisie({ pseudo: 'a‮b', metier: 'b\nc', zone: 'Akanda​' }));
+    expect(!r.ok && r.erreurs).toEqual({
+      pseudo: 'Caractère non autorisé.',
+      metier: 'Caractère non autorisé.',
+      zone: 'Caractère non autorisé.',
+    });
+    const r2 = verifierProfil(saisie({ services: [{ label: 'Fu⁦ite', prix: '5000' }] }));
+    expect(!r2.ok && r2.erreurs.services).toBe('Caractère non autorisé.');
+  });
   it('accepte aucun service', () => {
     const r = verifierProfil(saisie({ services: [] }));
     expect(r.ok && r.profil.services).toEqual([]);
@@ -134,7 +155,9 @@ describe('verifierProfil', () => {
     }
   });
   it('refuse les textes trop longs', () => {
-    const r = verifierProfil(saisie({ pseudo: 'a'.repeat(31), metier: 'b'.repeat(41), zone: 'c'.repeat(41) }));
+    const r = verifierProfil(
+      saisie({ pseudo: 'a'.repeat(31), metier: 'b'.repeat(41), zone: 'c'.repeat(41) }),
+    );
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.erreurs.pseudo).toBeTruthy();
@@ -144,7 +167,11 @@ describe('verifierProfil', () => {
   });
   it('accepte les longueurs pile au maximum', () => {
     const r = verifierProfil(
-      saisie({ pseudo: 'a'.repeat(30), metier: 'b'.repeat(40), services: [{ label: 'd'.repeat(40), prix: '1' }] }),
+      saisie({
+        pseudo: 'a'.repeat(30),
+        metier: 'b'.repeat(40),
+        services: [{ label: 'd'.repeat(40), prix: '1' }],
+      }),
     );
     expect(r.ok).toBe(true);
   });
@@ -225,7 +252,10 @@ describe('nettoyerProfil', () => {
     ['trop de services', { ...profilValide, services: Array(4).fill({ label: 'a', prix: 1 }) }],
     ['service null', { ...profilValide, services: [null] }],
     ['service sans nom', { ...profilValide, services: [{ label: '', prix: 1 }] }],
-    ['nom de service trop long', { ...profilValide, services: [{ label: 'a'.repeat(41), prix: 1 }] }],
+    [
+      'nom de service trop long',
+      { ...profilValide, services: [{ label: 'a'.repeat(41), prix: 1 }] },
+    ],
     ['prix texte', { ...profilValide, services: [{ label: 'a', prix: '5000' }] }],
     ['prix à virgule', { ...profilValide, services: [{ label: 'a', prix: 5.5 }] }],
     ['prix nul', { ...profilValide, services: [{ label: 'a', prix: 0 }] }],
@@ -234,5 +264,54 @@ describe('nettoyerProfil', () => {
     ['prix NaN', { ...profilValide, services: [{ label: 'a', prix: NaN }] }],
   ])('refuse : %s', (_nom, donnee) => {
     expect(nettoyerProfil(donnee)).toBeNull();
+  });
+  it('refuse un pseudo ou une zone qui pourrait tromper l’affichage', () => {
+    expect(nettoyerProfil({ ...profilValide, pseudo: 'admin‮exe' })).toBeNull();
+    expect(nettoyerProfil({ ...profilValide, zone: 'Akanda​' })).toBeNull();
+    expect(
+      nettoyerProfil({ ...profilValide, services: [{ label: 'a\u0000b', prix: 1 }] }),
+    ).toBeNull();
+  });
+});
+
+describe('texteSur', () => {
+  it('garde un texte normal, accents et emoji compris', () => {
+    expect(texteSur('  Owendo – Café 😀 ', 40)).toBe('Owendo – Café 😀');
+  });
+  it.each([
+    ['nul', '\u0000'],
+    ['retour à la ligne', '\n'],
+    ['tabulation', '\t'],
+    ['échappement', '\u001B'],
+    ['suppression', '\u007F'],
+    ['contrôle C1', '\u0085'],
+    ['contrôle C1 fin', '\u009F'],
+    ['espace sans largeur', '​'],
+    ['marque gauche-droite', '‎'],
+    ['marque droite-gauche', '‏'],
+    ['plongement gauche-droite', '‪'],
+    ['inversion droite-gauche', '‮'],
+    ['isolat gauche-droite', '⁦'],
+    ['fin d’isolat', '⁩'],
+    ['marque d’ordre', '﻿'],
+  ])('refuse un caractère piège : %s', (_nom, piege) => {
+    expect(texteSur(`mangue${piege}douce`, 40)).toBeNull();
+  });
+  it.each([
+    ['remplissage coréen', 'ㅤ'],
+    ['remplissage coréen (initial)', 'ᅟ'],
+    ['braille vide', '⠀'],
+    ['joint invisible', '⁠'],
+    ['tiret conditionnel', '­'],
+    ['grapheme joiner', '͏'],
+    ['séparateur mongol', '᠎'],
+    ['séparateur de ligne', ' '],
+  ])('refuse un caractère qui s’affiche vide : %s', (_nom, c) => {
+    expect(texteSur(`a${c}b`, 40)).toBeNull();
+    expect(texteSur(c, 40)).toBeNull();
+  });
+  it('refuse aussi un caractère piège en bord de texte (pas retiré par trim)', () => {
+    expect(texteSur('﻿mangue', 40)).toBeNull();
+    expect(texteSur('mangue​', 40)).toBeNull();
   });
 });

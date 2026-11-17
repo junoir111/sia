@@ -546,3 +546,224 @@
     transition: none;
   }
 }
+
+/* --- Rond avec l'initiale (maquette E6-modele2.jpg) --- */
+.rond-initiale {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.rond-initiale--moyen {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+
+.rond-initiale--petit {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+
+/* --- Bouton rouge (Silence Radio) --- */
+.bouton--alerte {
+  background: var(--sia-alerte);
+  color: var(--sia-sur-accent);
+  font-weight: 600;
+}
+
+.bouton--alerte:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* --- Panneau de confirmation qui monte du bas --- */
+.feuille {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.feuille__voile {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.6);
+  animation: feuille-voile 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feuille__panneau {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px var(--sia-marge) calc(env(safe-area-inset-bottom) + 16px);
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-bottom: none;
+  border-radius: var(--sia-rayon-carte) var(--sia-rayon-carte) 0 0;
+  animation: feuille-monte 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feuille__titre {
+  margin: 0 0 8px;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.feuille__texte {
+  margin: 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+}
+
+.feuille__erreur {
+  margin: 12px 0 0;
+  color: var(--sia-alerte);
+  font-size: var(--sia-aide);
+  font-weight: 500;
+}
+
+.feuille__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+@keyframes feuille-monte {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes feuille-voile {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- Accès discret aux bulles (E5, E6) --- */
+.acces-bulles {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 8px);
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+}
+
+.acces-bulles:active {
+  background: var(--sia-carte);
+}
+
+.acces-bulles:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -2px;
+}
+
+.acces-bulles__badge {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-sur-accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Pastille de messages non lus --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-sur-accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feuille__voile,
+  .feuille__panneau {
+    animation: none;
+  }
+}
+
+/* --- Petit bouton Non / Oui (bandeaux M1/M2, offres) --- */
+.petit-bouton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: var(--sia-toucher);
+  padding: 0 16px;
+  background: transparent;
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte);
+  font-size: var(--sia-libelle);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.petit-bouton--plein {
+  background: var(--sia-accent);
+  border-color: var(--sia-accent);
+  color: var(--sia-sur-accent);
+}
+
+.petit-bouton:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.petit-bouton:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.petit-bouton:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .petit-bouton {
+    transition: none;
+  }
+}

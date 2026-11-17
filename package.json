@@ -12,7 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest",
     "verifier": "tsc --noEmit && eslint . && vitest run",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "essai-reel": "vitest run --config essais-reels/vitest.config.ts"
   },
   "dependencies": {
     "matrix-js-sdk": "45.1.0",

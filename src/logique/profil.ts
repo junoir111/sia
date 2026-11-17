@@ -13,7 +13,14 @@ export type ProfilPrestataire = {
   services: Service[];
 };
 
-export const LIMITES: { pseudo: 30; metier: 40; zone: 40; service: 40; servicesMax: 3; prixMax: 100000000 } = {
+export const LIMITES: {
+  pseudo: 30;
+  metier: 40;
+  zone: 40;
+  service: 40;
+  servicesMax: 3;
+  prixMax: 100000000;
+} = {
   pseudo: 30,
   metier: 40,
   zone: 40,
@@ -38,7 +45,10 @@ export function modaliteDepuisChoix(recoit: boolean, deplace: boolean): Modalite
 }
 
 export function choixDepuisModalite(m: Modalite | null): { recoit: boolean; deplace: boolean } {
-  return { recoit: m === 'recoit' || m === 'les-deux', deplace: m === 'deplace' || m === 'les-deux' };
+  return {
+    recoit: m === 'recoit' || m === 'les-deux',
+    deplace: m === 'deplace' || m === 'les-deux',
+  };
 }
 
 // Chiffres seuls, ou groupés par 3 avec espace, point ou virgule ; « FCFA » facultatif à la fin.
@@ -67,10 +77,15 @@ export type SaisieProfil = {
   deplace: boolean;
   services: LigneService[];
 };
-export type ErreursProfil = Partial<Record<'pseudo' | 'metier' | 'zone' | 'modalite' | 'services', string>>;
+export type ErreursProfil = Partial<
+  Record<'pseudo' | 'metier' | 'zone' | 'modalite' | 'services', string>
+>;
 
-function erreurTexte(valeur: string, max: number, vide: string): string | undefined {
+export const CARACTERE_NON_AUTORISE = 'Caractère non autorisé.';
+
+export function erreurTexte(valeur: string, max: number, vide: string): string | undefined {
   if (valeur === '') return vide;
+  if (contientCaracterePiege(valeur)) return CARACTERE_NON_AUTORISE;
   if (valeur.length > max) return `${max} signes au plus.`;
   return undefined;
 }
@@ -85,6 +100,7 @@ function lireServices(lignes: LigneService[]): { services: Service[] } | { erreu
   const services: Service[] = [];
   for (const ligne of remplies) {
     if (ligne.label === '') return { erreur: 'Donne un nom à chaque service.' };
+    if (contientCaracterePiege(ligne.label)) return { erreur: CARACTERE_NON_AUTORISE };
     if (ligne.label.length > LIMITES.service) {
       return { erreur: `Nom de service : ${LIMITES.service} signes au plus.` };
     }
@@ -119,22 +135,47 @@ export function verifierProfil(
   }
   return {
     ok: true,
-    profil: { version: 1, role: 'prestataire', pseudo, metier, zone, modalite, services: services.services },
+    profil: {
+      version: 1,
+      role: 'prestataire',
+      pseudo,
+      metier,
+      zone,
+      modalite,
+      services: services.services,
+    },
   };
 }
 
 export function profilComplet(s: SaisieProfil): boolean {
-  return s.pseudo.trim() !== '' && s.metier.trim() !== '' && s.zone.trim() !== '' && (s.recoit || s.deplace);
+  return (
+    s.pseudo.trim() !== '' &&
+    s.metier.trim() !== '' &&
+    s.zone.trim() !== '' &&
+    (s.recoit || s.deplace)
+  );
 }
 
 // --- Lecture des données venues du serveur : on ne fait confiance à rien. ---
 
-function estObjet(v: unknown): v is Record<string, unknown> {
+export function estObjet(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function texteSur(v: unknown, max: number): string | null {
-  if (typeof v !== 'string') return null;
+// Caractères de contrôle, invisibles ou d'inversion de sens : ils peuvent tromper l'affichage
+// (un pseudo qui s'affiche à l'envers, par exemple). Un texte qui en contient est refusé, pas réparé.
+// Aussi les remplissages qui s'affichent vides (coreen, braille, mongol) : sinon un pseudo
+// peut paraitre vide ou devenir le faux double d'un autre.
+const CARACTERE_PIEGE =
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class -- chercher ces caractères est le but
+  /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u2028-\u202E\u2060-\u2069\u2800\u3164\uFEFF\uFFA0]/;
+
+export function contientCaracterePiege(t: string): boolean {
+  return CARACTERE_PIEGE.test(t);
+}
+
+export function texteSur(v: unknown, max: number): string | null {
+  if (typeof v !== 'string' || contientCaracterePiege(v)) return null;
   const t = v.trim();
   return t !== '' && t.length <= max ? t : null;
 }

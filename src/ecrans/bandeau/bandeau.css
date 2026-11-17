@@ -1,0 +1,68 @@
+/* Bandeaux M1 / M2 — maquettes M1-prestataire-notification.jpg et M2-client-reponses.jpg.
+   Carte de 104 px de haut, 8 px des bords, posée sous la barre d'état. */
+.notif {
+  position: fixed;
+  top: max(44px, calc(env(safe-area-inset-top) + 8px));
+  right: 0;
+  left: 0;
+  z-index: 10;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 8px;
+  pointer-events: none;
+}
+
+.notif__carte {
+  padding: 16px 12px 12px 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-carte);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.55);
+  pointer-events: auto;
+  animation: notif-arrive 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.notif__ligne {
+  margin: 0 4px 8px 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif__rangee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notif__question {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--sia-accent);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.notif__question--erreur {
+  color: var(--sia-alerte);
+  font-size: var(--sia-aide);
+}
+
+@keyframes notif-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif__carte {
+    animation: none;
+  }
+}

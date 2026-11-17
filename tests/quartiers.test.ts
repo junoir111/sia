@@ -3,7 +3,15 @@ import { QUARTIERS, chercherQuartiers } from '../src/logique/quartiers';
 
 describe('QUARTIERS', () => {
   it('contient les communes et quartiers cités dans le PRD', () => {
-    for (const nom of ['Libreville', 'Akanda', 'Owendo', 'Ntoum', 'PK12', 'Nzeng-Ayong', 'Mont-Bouët']) {
+    for (const nom of [
+      'Libreville',
+      'Akanda',
+      'Owendo',
+      'Ntoum',
+      'PK12',
+      'Nzeng-Ayong',
+      'Mont-Bouët',
+    ]) {
       expect(QUARTIERS).toContain(nom);
     }
   });
@@ -32,7 +40,13 @@ describe('chercherQuartiers', () => {
   });
   it("met d'abord ceux qui commencent par la saisie, puis ceux qui la contiennent", () => {
     // « Alénakiri » et « Kalikak » contiennent « ak » sans commencer par : ils viennent après les « Ak… ».
-    expect(chercherQuartiers('ak', 20)).toEqual(['Akanda', 'Akébé', 'Akournam', 'Alénakiri', 'Kalikak']);
+    expect(chercherQuartiers('ak', 20)).toEqual([
+      'Akanda',
+      'Akébé',
+      'Akournam',
+      'Alénakiri',
+      'Kalikak',
+    ]);
   });
   it('respecte le maximum (4 par défaut)', () => {
     expect(chercherQuartiers('a').length).toBe(4);

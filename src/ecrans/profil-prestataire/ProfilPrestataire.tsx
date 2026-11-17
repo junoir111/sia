@@ -1,7 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import type { MatrixClient } from 'matrix-js-sdk';
 import { CHEMINS } from '../../chemins';
+import { DUREE_MAX_ANNONCE_MS } from '../../config';
+import { useMatrix } from '../../coquille/FournisseurMatrix';
 import {
   LIMITES,
   choixDepuisModalite,
@@ -15,11 +18,13 @@ import type {
   ProfilPrestataire as Profil,
   SaisieProfil,
 } from '../../logique/profil';
+import { monStatutActif, publierStatut, retirerStatut } from '../../matrix/mur';
 import { enregistrerProfil, lireProfil } from '../../matrix/profil';
 import type { ErreurProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { ecrireDisponible, lireDisponible } from '../../appareil/disponible';
 import { effacerPhoto, enregistrerPhoto, lirePhoto, preparerPhoto } from '../../appareil/photo';
+import { AccesBulles } from '../../ui/AccesBulles';
 import { Avatar } from '../../ui/Avatar';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonSia } from '../../ui/BoutonSia';
@@ -28,6 +33,9 @@ import { LigneService } from '../../ui/LigneService';
 import { MessageErreur } from '../../ui/MessageErreur';
 import { PastilleChoix } from '../../ui/PastilleChoix';
 import { IconeCrayon } from '../../ui/icones';
+import { signalerDisponible } from '../bandeau/signal';
+import { compterNouveautes, useBulles } from '../bulles/useBulles';
+import { familleErreur } from '../profil-client/branchements';
 import './profil-prestataire.css';
 
 const NB_LIGNES_SERVICE = 2;
@@ -49,6 +57,13 @@ function saisieDepuis(profil: Profil): SaisieProfil {
   };
 }
 
+function exigerClient(client: MatrixClient | null): MatrixClient {
+  // Client pas encore prêt : même message qu'une coupure réseau.
+  if (!client)
+    throw Object.assign(new Error('Client Matrix pas prêt.'), { name: 'ConnectionError' });
+  return client;
+}
+
 function messageDe(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : MESSAGES.inconnue;
 }
@@ -56,6 +71,8 @@ function messageDe(erreur: unknown): string {
 /** E5 Profil prestataire (modèle 3 « Pseudo en titre »). */
 export function ProfilPrestataire() {
   const navigate = useNavigate();
+  const { client } = useMatrix();
+  const bulles = useBulles(client);
   const [session] = useState(lireSession);
   const [saisie, setSaisie] = useState<SaisieProfil>(() => ({
     pseudo: session ? pseudoPropose(session.userId) : '',
@@ -69,7 +86,9 @@ export function ProfilPrestataire() {
   const [bandeau, setBandeau] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
   const [envoi, setEnvoi] = useState(false);
-  const [visibleA, setVisibleA] = useState<string | null>(null);
+  // undefined : pas encore touché SIA ici ; l'état vient alors du Mur (ou du téléphone en secours).
+  const [choixVisible, setVisibleA] = useState<string | null | undefined>(undefined);
+  const [zoneSecours, setZoneSecours] = useState<string | null>(null);
   const [modifie, setModifie] = useState(false);
   const [eteint, setEteint] = useState(false);
   const [edition, setEdition] = useState(false);
@@ -105,7 +124,7 @@ export function ProfilPrestataire() {
         }
         if (!resultat.profil) return;
         setSaisie(saisieDepuis(resultat.profil));
-        if (lireDisponible()) setVisibleA(resultat.profil.zone);
+        if (lireDisponible()) setZoneSecours(resultat.profil.zone);
       });
     return () => {
       actif = false;
@@ -118,6 +137,8 @@ export function ProfilPrestataire() {
 
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
+  const statut = client ? monStatutActif(client) : null;
+  const visibleA = choixVisible !== undefined ? choixVisible : (statut?.statut.zone ?? zoneSecours);
   const allume = visibleA !== null;
   const complet = profilComplet(saisie);
 
@@ -137,12 +158,26 @@ export function ProfilPrestataire() {
     );
   }
 
-  function eteindre() {
+  function echecReseau(e: unknown) {
+    const famille = familleErreur(e);
+    if (famille === 'session') navigate(CHEMINS.accueil, { replace: true });
+    else setBandeau(MESSAGES[famille]);
+  }
+
+  async function eteindre() {
+    setEnvoi(true);
+    try {
+      await retirerStatut(exigerClient(client));
+    } catch (e) {
+      setEnvoi(false);
+      echecReseau(e);
+      return;
+    }
+    setEnvoi(false);
     try {
       ecrireDisponible(false);
     } catch {
-      setBandeau(MESSAGES.inconnue);
-      return;
+      // Le Mur est à jour ; seul le secours du téléphone n'a pas pu être écrit.
     }
     setVisibleA(null);
     setEteint(true);
@@ -152,7 +187,7 @@ export function ProfilPrestataire() {
     if (envoi || !session) return;
     setBandeau(null);
     if (allume && !modifie) {
-      eteindre();
+      await eteindre();
       return;
     }
     const verifie = verifierProfil(saisie);
@@ -165,18 +200,32 @@ export function ProfilPrestataire() {
       ok: false as const,
       erreur: 'inconnue' as const,
     }));
-    setEnvoi(false);
     if (!resultat.ok) {
+      setEnvoi(false);
       if (resultat.erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
       else setBandeau(MESSAGES[resultat.erreur]);
       return;
     }
+    const { pseudo, metier, zone } = verifie.profil;
+    try {
+      await publierStatut(exigerClient(client), {
+        pseudo,
+        metier,
+        zone,
+        fin: Date.now() + DUREE_MAX_ANNONCE_MS,
+      });
+    } catch (e) {
+      setEnvoi(false);
+      echecReseau(e);
+      return;
+    }
+    setEnvoi(false);
     try {
       ecrireDisponible(true);
     } catch {
-      setBandeau(MESSAGES.inconnue);
-      return;
+      // Le statut est publié sur le Mur ; seul le secours du téléphone manque.
     }
+    signalerDisponible();
     setModifie(false);
     setEteint(false);
     setVisibleA(verifie.profil.zone);
@@ -227,6 +276,7 @@ export function ProfilPrestataire() {
   return (
     <main className="ecran profil">
       <h1 className="masque">Ton profil</h1>
+      <AccesBulles nouveautes={compterNouveautes(bulles)} />
       <fieldset className="profil__formulaire" disabled={chargement}>
         <div className="profil__espace profil__espace--haut" />
         <div className="profil__entete">

@@ -68,7 +68,9 @@ describe('Écran Créer mon compte (E3)', () => {
     expect(screen.getByLabelText("Code d'invitation")).toHaveAttribute('aria-invalid', 'true');
     expect(bouton()).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Code d'invitation"), { target: { value: 'PALMIER-49' } });
+    fireEvent.change(screen.getByLabelText("Code d'invitation"), {
+      target: { value: 'PALMIER-49' },
+    });
     expect(bouton()).toBeEnabled();
   });
 

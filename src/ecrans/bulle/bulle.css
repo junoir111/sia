@@ -1,0 +1,312 @@
+/* M4 Dans la bulle — mesures de la maquette M4-bulle.jpg (375 × 812). */
+.bulle {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+}
+
+/* --- En-tête : retour, rond, pseudo, état, Silence Radio --- */
+.bulle__entete {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: calc(env(safe-area-inset-top) + 44px) 0 8px 4px;
+  border-bottom: 1px solid var(--sia-ligne);
+}
+
+.retour.bulle__retour {
+  flex: none;
+  margin-left: 0;
+}
+
+.bulle__qui {
+  flex: 1;
+  min-width: 0;
+  margin-left: 12px;
+}
+
+.bulle__pseudo {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--sia-corps);
+  font-weight: 600;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulle__sous {
+  margin: 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.bulle__sous--vif {
+  color: var(--sia-accent);
+}
+
+.bulle__silence {
+  flex: none;
+  min-height: var(--sia-toucher);
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-alerte);
+  font-size: var(--sia-libelle);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bulle__silence:active {
+  background: var(--sia-carte);
+}
+
+.bulle__silence:focus-visible {
+  outline: 2px solid var(--sia-alerte);
+  outline-offset: -2px;
+}
+
+/* --- Fil : la demande, le rappel, les messages --- */
+.bulle__fil {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px var(--sia-marge) 8px;
+  overscroll-behavior: contain;
+}
+
+.demande {
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+}
+
+.demande__entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: var(--sia-toucher);
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-carte);
+  color: var(--sia-texte-doux);
+  cursor: pointer;
+}
+
+.demande__entete:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -2px;
+}
+
+.demande__titre {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Chevron vers le haut quand l'encadré est ouvert, vers le bas quand il est replié. */
+.demande__chevron {
+  transform: rotate(-90deg);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.demande--repliee .demande__chevron {
+  transform: rotate(90deg);
+}
+
+.demande__corps {
+  margin-top: -4px;
+  padding: 0 16px 12px;
+}
+
+.demande__resume {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.demande__texte {
+  margin: 4px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.bulle__rappel {
+  margin: 24px 0 16px;
+  color: var(--sia-texte-doux);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+}
+
+.bulle__note {
+  margin: 16px 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  text-align: center;
+}
+
+.bulle__note--fermee {
+  color: var(--sia-texte);
+  font-weight: 600;
+}
+
+/* --- Messages : les miens à droite, les siens à gauche --- */
+.bulle__messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message {
+  align-self: flex-start;
+  min-width: 72px;
+  max-width: 264px;
+  padding: 12px 12px 8px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+}
+
+.message--moi {
+  align-self: flex-end;
+  background: var(--sia-ligne);
+}
+
+.message__texte {
+  margin: 0;
+  font-size: var(--sia-corps);
+  line-height: 22px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.message__piste {
+  display: block;
+  height: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: var(--sia-contour);
+  border-radius: 1px;
+}
+
+.message__temps {
+  display: block;
+  height: 100%;
+  background: var(--sia-accent);
+  transform-origin: left;
+  animation-name: message-temps;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+@keyframes message-temps {
+  from {
+    transform: scaleX(var(--reste, 1));
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* --- Zone d'écriture --- */
+.bulle__saisie {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px var(--sia-marge) calc(env(safe-area-inset-bottom) + 32px);
+}
+
+.bulle__rangee {
+  display: flex;
+  gap: 8px;
+}
+
+.bulle__champ {
+  flex: 1;
+  min-width: 0;
+  height: var(--sia-toucher);
+  padding: 0 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-rond);
+  caret-color: var(--sia-accent);
+  font-size: var(--sia-corps);
+  outline: none;
+  transition: border-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bulle__champ:focus {
+  border-color: var(--sia-accent);
+}
+
+.bulle__champ:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.bulle__envoyer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  padding: 0;
+  background: var(--sia-accent);
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-sur-accent);
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bulle__envoyer:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.bulle__envoyer:disabled {
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  color: var(--sia-eteint);
+  cursor: not-allowed;
+}
+
+.bulle__envoyer[aria-busy='true'] {
+  background: var(--sia-accent);
+  color: var(--sia-sur-accent);
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.bulle__envoyer:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demande__chevron,
+  .bulle__champ,
+  .bulle__envoyer {
+    transition: none;
+  }
+}

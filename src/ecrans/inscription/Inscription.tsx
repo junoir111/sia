@@ -8,7 +8,11 @@ import {
   normaliserIdentifiant,
   verifierInscription,
 } from '../../logique/inscription';
-import type { ChampInscription, ErreursInscription, ValeursInscription } from '../../logique/inscription';
+import type {
+  ChampInscription,
+  ErreursInscription,
+  ValeursInscription,
+} from '../../logique/inscription';
 import { creerCompte } from '../../matrix/auth';
 import type { ErreurInscription, ResultatInscription } from '../../matrix/auth';
 import { enregistrerSession } from '../../matrix/session';
@@ -35,7 +39,10 @@ const REPONSES_SERVEUR: Record<ErreurInscription, Reponse> = {
     champ: 'code',
     message: "Code d'invitation inconnu. Demande-le à la personne qui t'a invité.",
   },
-  'identifiant-pris': { champ: 'identifiant', message: 'Ce nom est déjà pris. Essaie-en un autre.' },
+  'identifiant-pris': {
+    champ: 'identifiant',
+    message: 'Ce nom est déjà pris. Essaie-en un autre.',
+  },
   'identifiant-invalide': {
     champ: 'identifiant',
     message: 'Le serveur refuse ce nom. Essaie-en un autre.',

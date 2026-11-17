@@ -59,6 +59,8 @@ export function chercherQuartiers(saisie: string, max = 4): string[] {
     return [];
   }
   const commencent = QUARTIERS.filter((q) => simplifier(q).startsWith(cle));
-  const contiennent = QUARTIERS.filter((q) => !simplifier(q).startsWith(cle) && simplifier(q).includes(cle));
+  const contiennent = QUARTIERS.filter(
+    (q) => !simplifier(q).startsWith(cle) && simplifier(q).includes(cle),
+  );
   return [...commencent, ...contiennent].slice(0, max);
 }

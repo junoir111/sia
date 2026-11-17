@@ -1,9 +1,10 @@
 import { ADRESSE_SERVEUR } from '../config';
 import { nettoyerProfil, type ProfilPrestataire } from '../logique/profil';
+import { nettoyerProfilClient, type ProfilClient } from '../logique/profil-client';
 import type { Session } from './auth';
 
 /*
- * F4 — Profil prestataire, gardé dans la donnée de compte privée « io.sia.profile »
+ * F4 / F5 — Profil prestataire ou client (champ « role »), gardé dans la donnée de compte privée « io.sia.profile »
  * (document 5, table PROFIL). Seuls son propriétaire et le serveur peuvent la lire.
  * Les photos ne vont JAMAIS ici : elles restent sur l'appareil (src/appareil/photo.ts).
  * Rien n'est écrit dans la console (le jeton d'accès passe dans chaque requête).
@@ -30,7 +31,7 @@ function adresseProfil(session: Session): string {
 async function envoyer(
   session: Session,
   methode: 'GET' | 'PUT',
-  corps?: ProfilPrestataire,
+  corps?: ProfilPrestataire | ProfilClient,
 ): Promise<Reponse | 'reseau'> {
   let reponse: Response;
   let texte: string;
@@ -82,6 +83,37 @@ export async function enregistrerProfil(
   profil: ProfilPrestataire,
 ): Promise<{ ok: true } | { ok: false; erreur: ErreurProfil }> {
   const propre = nettoyerProfil(profil);
+  if (!propre) return { ok: false, erreur: 'inconnue' };
+  const reponse = await envoyer(session, 'PUT', propre);
+  if (reponse === 'reseau') return { ok: false, erreur: 'reseau' };
+  if (reponse.statut === 200) return { ok: true };
+  return { ok: false, erreur: traduireErreur(reponse) };
+}
+
+/*
+ * Profil client : même donnée de compte, avec role = 'client'. Un profil prestataire lu ici rend null
+ * (et inversement pour lireProfil) : chaque écran ne voit que son rôle.
+ */
+
+/** Lit le profil client sur le serveur. Absent, mal formé ou d'un autre rôle -> null. */
+export async function lireProfilClient(
+  session: Session,
+): Promise<{ ok: true; profil: ProfilClient | null } | { ok: false; erreur: ErreurProfil }> {
+  const reponse = await envoyer(session, 'GET');
+  if (reponse === 'reseau') return { ok: false, erreur: 'reseau' };
+  if (reponse.statut === 200) return { ok: true, profil: nettoyerProfilClient(reponse.corps) };
+  if (reponse.statut === 404 && reponse.corps?.errcode === 'M_NOT_FOUND') {
+    return { ok: true, profil: null };
+  }
+  return { ok: false, erreur: traduireErreur(reponse) };
+}
+
+/** Enregistre le profil client, après l'avoir revérifié (seuls version, role, pseudo, zone partent). */
+export async function enregistrerProfilClient(
+  session: Session,
+  profil: ProfilClient,
+): Promise<{ ok: true } | { ok: false; erreur: ErreurProfil }> {
+  const propre = nettoyerProfilClient(profil);
   if (!propre) return { ok: false, erreur: 'inconnue' };
   const reponse = await envoyer(session, 'PUT', propre);
   if (reponse === 'reseau') return { ok: false, erreur: 'reseau' };

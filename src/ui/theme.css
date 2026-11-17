@@ -95,6 +95,7 @@ input {
 
 /* Gabarit commun des écrans : 375 px de référence, marges de 16 px. */
 .ecran {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;

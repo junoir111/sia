@@ -8,7 +8,15 @@ export const CHEMINS = {
   profilPrestataire: '/profil/prestataire',
   profilClient: '/profil/client',
   mur: '/mur',
+  bulles: '/bulles',
+  /** Motif de route ; pour un lien, utiliser cheminBulle(roomId). */
+  bulle: '/bulle/:roomId',
 } as const;
+
+/** Adresse d'une bulle (M4) ; l'identifiant du salon est encodé (il contient « ! » et « : »). */
+export function cheminBulle(roomId: string): string {
+  return '/bulle/' + encodeURIComponent(roomId);
+}
 
 /** Après une inscription réussie : profil selon le rôle du code, sinon choix du rôle (E4). */
 export function cheminApresInscription(role: 'prestataire' | 'client' | null): string {

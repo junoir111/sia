@@ -1,5 +1,9 @@
+import { effacerPhoto } from '../appareil/photo';
 import { ADRESSE_SERVEUR } from '../config';
-import { estSession } from './session';
+import { arreterClient, clientActif, PREFIXE_BASE_CRYPTO } from './client';
+import { toutEffacerMaintenant } from './ephemere';
+import { oublierMur } from './mur';
+import { effacerSession, estSession } from './session';
 
 /*
  * Inscription Matrix (spec client-serveur v3, POST /register) avec le jeton d'invitation
@@ -20,6 +24,8 @@ export type ResultatInscription =
   { ok: true; session: Session } | { ok: false; erreur: ErreurInscription };
 
 const URL_INSCRIPTION = `${ADRESSE_SERVEUR}/_matrix/client/v3/register?kind=user`;
+const URL_CONNEXION = `${ADRESSE_SERVEUR}/_matrix/client/v3/login`;
+const URL_DECONNEXION = `${ADRESSE_SERVEUR}/_matrix/client/v3/logout`;
 const NOM_SERVEUR = new URL(ADRESSE_SERVEUR).hostname;
 const NOM_APPAREIL = 'SIA';
 const DELAI_RESEAU_MS = 20_000;
@@ -74,11 +80,14 @@ function verifierSaisie(
   return null;
 }
 
-async function envoyer(corps: Record<string, unknown>): Promise<Reponse | 'reseau'> {
+async function envoyer(
+  corps: Record<string, unknown>,
+  url: string = URL_INSCRIPTION,
+): Promise<Reponse | 'reseau'> {
   let reponse: Response;
   let texte: string;
   try {
-    reponse = await fetch(URL_INSCRIPTION, {
+    reponse = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(corps),
@@ -126,17 +135,18 @@ function prochaineEtape(etat: EtatUia): string | null {
   return flux?.find((etape) => !etat.faites.includes(etape)) ?? null;
 }
 
-function lireSessionServeur(corps: Record<string, unknown> | null): ResultatInscription {
-  if (!corps) return echec('inconnue');
+/** Session donnée par le serveur, ou null si un champ manque, est trop long ou vient d'un autre serveur. */
+function lireSessionServeur(corps: Record<string, unknown> | null): Session | null {
+  if (!corps) return null;
   const session = {
     userId: corps.user_id,
     accessToken: corps.access_token,
     deviceId: corps.device_id,
   };
-  if (!estSession(session)) return echec('inconnue');
+  if (!estSession(session)) return null;
   const forme = session.userId.length <= LONGUEUR_MAX_ID_MATRIX && session.userId.startsWith('@');
-  if (!forme || !session.userId.endsWith(`:${NOM_SERVEUR}`)) return echec('inconnue');
-  return { ok: true, session };
+  if (!forme || !session.userId.endsWith(`:${NOM_SERVEUR}`)) return null;
+  return { userId: session.userId, accessToken: session.accessToken, deviceId: session.deviceId };
 }
 
 function traduireErreur(reponse: Reponse, jetonEnvoye: boolean): ErreurInscription {
@@ -172,7 +182,10 @@ export async function creerCompte(
 
   for (let etapes = 0; etapes <= MAX_ETAPES; etapes += 1) {
     if (reponse === 'reseau') return echec('reseau');
-    if (reponse.statut === 200) return lireSessionServeur(reponse.corps);
+    if (reponse.statut === 200) {
+      const session = lireSessionServeur(reponse.corps);
+      return session ? { ok: true, session } : echec('inconnue');
+    }
     if (reponse.statut !== 401) return echec(traduireErreur(reponse, jetonEnvoye));
 
     const etat = lireEtatUia(reponse.corps);
@@ -189,4 +202,145 @@ export async function creerCompte(
     reponse = await envoyer({ ...base, auth });
   }
   return echec('inconnue');
+}
+
+export type ErreurConnexion = 'identifiants' | 'reseau' | 'inconnue';
+export type ResultatConnexion =
+  { ok: true; session: Session } | { ok: false; erreur: ErreurConnexion };
+
+/** Mot de passe envoyé à la connexion : 1024 signes au plus (au-delà, refusé sans appel réseau). */
+const LONGUEUR_MAX_MOT_DE_PASSE = 1024;
+
+/**
+ * Connexion par identifiant (partie avant « : ») et mot de passe (POST /login, m.login.password).
+ * Ne journalise jamais le mot de passe ni le jeton d'accès.
+ */
+export async function connecter(
+  identifiant: string,
+  motDePasse: string,
+): Promise<ResultatConnexion> {
+  if (
+    typeof identifiant !== 'string' ||
+    identifiant.length > LONGUEUR_MAX_IDENTIFIANT ||
+    !FORME_IDENTIFIANT.test(identifiant) ||
+    typeof motDePasse !== 'string' ||
+    motDePasse.length === 0 ||
+    motDePasse.length > LONGUEUR_MAX_MOT_DE_PASSE
+  ) {
+    return { ok: false, erreur: 'identifiants' };
+  }
+  const reponse = await envoyer(
+    {
+      type: 'm.login.password',
+      identifier: { type: 'm.id.user', user: identifiant },
+      password: motDePasse,
+      initial_device_display_name: NOM_APPAREIL,
+    },
+    URL_CONNEXION,
+  );
+  if (reponse === 'reseau') return { ok: false, erreur: 'reseau' };
+  if (reponse.statut === 200) {
+    const session = lireSessionServeur(reponse.corps);
+    return session ? { ok: true, session } : { ok: false, erreur: 'inconnue' };
+  }
+  if (reponse.statut === 403 && reponse.corps?.errcode === 'M_FORBIDDEN') {
+    return { ok: false, erreur: 'identifiants' };
+  }
+  if (STATUTS_SERVEUR_INJOIGNABLE.includes(reponse.statut) && !reponse.corps) {
+    return { ok: false, erreur: 'reseau' };
+  }
+  return { ok: false, erreur: 'inconnue' };
+}
+
+/** Clés gardées sur l'appareil par SIA (hors session, effacée à part). */
+const CLES_APPAREIL = [
+  'sia.disponible',
+  'sia.demande',
+  'sia.a-effacer',
+  'sia.statut',
+  'sia.vues',
+  'sia.annuaire',
+  'sia.appareils',
+];
+/** Temps laissé aux effacements en attente avant d'annuler le jeton. */
+const DELAI_EFFACEMENTS_MS = 10_000;
+/** Bases IndexedDB du chiffrement Rust (noms fixés par matrix-js-sdk à partir du préfixe). */
+function basesChiffrement(): string[] {
+  return [
+    `${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto`,
+    `${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto-meta`,
+  ];
+}
+
+function essayer(action: () => void): void {
+  try {
+    action();
+  } catch {
+    // Étape impossible sur cet appareil : on passe à la suivante.
+  }
+}
+
+async function annulerJeton(session: Session): Promise<void> {
+  if (!estSession(session)) return;
+  try {
+    await fetch(URL_DECONNEXION, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(DELAI_RESEAU_MS),
+    });
+  } catch {
+    // Serveur injoignable : on efface quand même l'appareil.
+  }
+}
+
+function effacerBase(nom: string): Promise<void> {
+  return new Promise((resoudre) => {
+    try {
+      const demande = indexedDB.deleteDatabase(nom);
+      demande.onsuccess = () => resoudre();
+      demande.onerror = () => resoudre();
+      // Base encore ouverte ailleurs : elle sera effacée à sa fermeture, on n'attend pas.
+      demande.onblocked = () => resoudre();
+    } catch {
+      resoudre();
+    }
+  });
+}
+
+/** Efface tout de suite les messages en file (il faut encore le jeton), 10 s au plus. */
+async function effacerMessagesEnAttente(): Promise<void> {
+  const c = clientActif();
+  if (!c) return;
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  const delai = new Promise<void>((resoudre) => {
+    minuterie = setTimeout(resoudre, DELAI_EFFACEMENTS_MS);
+  });
+  try {
+    await Promise.race([toutEffacerMaintenant(c).catch(() => undefined), delai]);
+  } finally {
+    clearTimeout(minuterie);
+  }
+}
+
+/**
+ * Déconnexion (document 5, §4.5) : jeton annulé sur le serveur, puis données de l'appareil effacées
+ * (session, état local, photo, clés de chiffrement). Ne rejette jamais : chaque étape est tentée.
+ */
+export async function deconnecter(session: Session): Promise<void> {
+  await effacerMessagesEnAttente();
+  await annulerJeton(session);
+  essayer(() => arreterClient());
+  essayer(() => oublierMur());
+  essayer(() => effacerSession());
+  for (const cle of CLES_APPAREIL) essayer(() => localStorage.removeItem(cle));
+  try {
+    await effacerPhoto();
+  } catch {
+    // Pas de photo ou stockage indisponible.
+  }
+  for (const nom of basesChiffrement()) await effacerBase(nom);
 }

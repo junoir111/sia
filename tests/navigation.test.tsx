@@ -29,16 +29,18 @@ describe('Navigation', () => {
     expect(screen.getByRole('main')).toHaveTextContent('Créer mon compte');
   });
 
-  it.each([
-    CHEMINS.connexion,
-    CHEMINS.codeSecret,
-    CHEMINS.role,
-    CHEMINS.profilClient,
-    CHEMINS.mur,
-  ])('%s affiche « Bientôt disponible »', (chemin) => {
-    afficher(chemin);
-    expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+  it('/connexion affiche la connexion (E2)', () => {
+    afficher(CHEMINS.connexion);
+    expect(screen.getAllByText(/Se connecter/).length).toBeGreaterThan(0);
   });
+
+  it.each([CHEMINS.codeSecret, CHEMINS.role, CHEMINS.mur])(
+    '%s affiche « Bientôt disponible »',
+    (chemin) => {
+      afficher(chemin);
+      expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+    },
+  );
 
   it('/profil/prestataire affiche le profil prestataire (avec une session)', () => {
     localStorage.setItem(
@@ -51,7 +53,7 @@ describe('Navigation', () => {
   });
 
   it("le lien de « Bientôt disponible » ramène à l'accueil", () => {
-    afficher(CHEMINS.connexion);
+    afficher(CHEMINS.codeSecret);
     fireEvent.click(screen.getByRole('link', { name: "Retour à l'accueil" }));
     expect(screen.getByRole('heading', { name: 'SIA' })).toBeInTheDocument();
   });

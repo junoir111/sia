@@ -97,3 +97,39 @@ export function IconeCroix({ taille = 14, className }: ProprietesIcone) {
     </svg>
   );
 }
+
+export function IconeChevron({ taille = 16, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={2.2}>
+      <path d="m9 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+export function IconeHorloge({ taille = 16, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 6.5V12l3.5 2.5" />
+    </svg>
+  );
+}
+
+export function IconeEnvoyer({ taille = 24, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={2.2}>
+      <path d="M4.5 12h15" />
+      <path d="M13.5 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** Deux bulles de discussion : accès à la liste des bulles. */
+export function IconeBulles({ taille = 24, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.7}>
+      <path d="M3.5 5.5A2 2 0 0 1 5.5 3.5h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5v-3.5h0a2 2 0 0 1-1.5-2Z" />
+      <path d="M16.5 8.5h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2v3l-3.5-3h-4.5a2 2 0 0 1-2-2v-1" />
+    </svg>
+  );
+}
