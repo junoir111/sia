@@ -1,0 +1,172 @@
+/* E5 Profil prestataire — mesures de la maquette E5-modele3.jpg (375 × 812).
+   Les vides entre les blocs grandissent dans les proportions de la maquette ;
+   quand le clavier réduit l'écran, ils descendent à 16 px et la page défile. */
+/* Le fieldset ne sert qu'à tout bloquer pendant le chargement : ses enfants restent
+   rangés directement dans la colonne de l'écran. */
+.profil__formulaire {
+  display: contents;
+}
+
+.profil__espace {
+  min-height: 16px;
+}
+
+/* Proportions des vides de la maquette, en px à 812 de haut : 72, 76, 48, 64, 116, 34. */
+.profil__espace--haut {
+  flex: 72 1 0;
+}
+.profil__espace--1 {
+  flex: 76 1 0;
+}
+.profil__espace--2 {
+  flex: 48 1 0;
+}
+.profil__espace--3 {
+  flex: 64 1 0;
+}
+.profil__espace--4 {
+  flex: 116 1 0;
+}
+.profil__espace--bas {
+  flex: 34 1 0;
+  min-height: 0;
+}
+
+/* --- Haut : photo, pseudo en titre, métier en vert, crayon --- */
+.profil__entete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profil__titre {
+  min-width: 0;
+  /* place laissée par la photo (64 + 16) et le crayon (4 + 48) */
+  max-width: calc(100% - 132px);
+  margin-left: 16px;
+}
+
+.profil__pseudo {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 29px;
+  overflow-wrap: anywhere;
+}
+
+.profil__metier {
+  margin: 0;
+  color: var(--sia-accent);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.profil__saisie {
+  display: block;
+  width: 211px;
+  max-width: 100%;
+  height: var(--sia-toucher);
+  padding: 0 12px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: 12px;
+  caret-color: var(--sia-accent);
+  outline: none;
+}
+
+.profil__saisie:focus {
+  border-color: var(--sia-accent);
+}
+
+.profil__saisie[aria-invalid='true'] {
+  border-color: var(--sia-alerte);
+}
+
+.profil__saisie--pseudo {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.profil__saisie--metier::placeholder {
+  font-size: var(--sia-libelle);
+}
+
+.profil__saisie--pseudo::placeholder {
+  font-size: var(--sia-corps);
+  font-weight: 400;
+}
+
+.profil__saisie--metier {
+  margin-top: 4px;
+  color: var(--sia-accent);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.profil__crayon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  margin: -4px 0 0 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  cursor: pointer;
+}
+
+.profil__crayon:active {
+  background: var(--sia-carte);
+}
+
+.profil__crayon:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -2px;
+}
+
+.profil__erreur-centre {
+  display: flex;
+  justify-content: center;
+}
+
+/* --- Comment tu travailles --- */
+.profil__choix {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* --- Services --- */
+.profil__services {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profil__services .message-erreur {
+  margin-top: 0;
+}
+
+/* --- Bas : bandeau, bouton SIA, phrase --- */
+.profil__bas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profil__phrase {
+  min-height: 22px;
+  margin: 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 22px;
+  text-align: center;
+}

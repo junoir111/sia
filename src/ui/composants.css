@@ -261,3 +261,288 @@
     transition: none;
   }
 }
+
+/* --- Pastille de choix (maquette E5-modele3.jpg) --- */
+.pastille {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--sia-toucher);
+  padding: 0 16px;
+  background: transparent;
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pastille[aria-pressed='true'] {
+  padding-left: 12px;
+  background: var(--sia-carte);
+  border-color: var(--sia-accent);
+  box-shadow: inset 0 0 0 0.5px var(--sia-accent);
+  color: var(--sia-texte);
+}
+
+.pastille__coche {
+  color: var(--sia-accent);
+}
+
+.pastille:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+/* --- Champ quartier : loupe et suggestions --- */
+.quartier {
+  position: relative;
+}
+
+.quartier__cadre {
+  position: relative;
+  width: 240px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.quartier__loupe {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: var(--sia-texte-doux);
+  pointer-events: none;
+}
+
+.quartier__saisie {
+  padding-left: 44px;
+}
+
+.quartier__liste {
+  position: absolute;
+  top: calc(var(--sia-hauteur-bouton) + 4px);
+  right: 0;
+  left: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-carte);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.55);
+}
+
+.quartier__liste[hidden] {
+  display: none;
+}
+
+.quartier__option {
+  display: flex;
+  align-items: center;
+  min-height: var(--sia-toucher);
+  padding: 0 16px;
+  color: var(--sia-texte-doux);
+  white-space: pre;
+  cursor: pointer;
+}
+
+.quartier__option strong {
+  color: var(--sia-texte);
+  font-weight: 600;
+}
+
+.quartier__option:active {
+  background: var(--sia-ligne);
+}
+
+.quartier .message-erreur {
+  justify-content: center;
+}
+
+/* --- Ligne de service : nom + prix en FCFA --- */
+.service {
+  display: flex;
+  gap: 8px;
+}
+
+.service__nom {
+  flex: 1;
+  min-width: 0;
+}
+
+.service__prix {
+  position: relative;
+  flex: none;
+  width: 128px;
+}
+
+.service__saisie-prix {
+  /* « FCFA » (13 px) + 16 px de marge : laisse la place à « 10 000 ». */
+  padding-right: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.service__devise {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  font-weight: 500;
+  pointer-events: none;
+}
+
+/* --- Photo ronde --- */
+.avatar {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+}
+
+.avatar__rond {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  cursor: pointer;
+}
+
+.avatar__rond:has(.avatar__image) {
+  border-color: transparent;
+}
+
+.avatar__rond:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.avatar__rond[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.avatar__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar__vide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--sia-aide);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+/* Zone de 48 px centrée sur le coin haut droit ; la croix visible fait 22 px. */
+.avatar__retirer {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--sia-texte);
+  cursor: pointer;
+}
+
+.avatar__croix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--sia-fond);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+}
+
+.avatar__retirer:focus-visible .avatar__croix {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 1px;
+}
+
+/* --- Gros bouton SIA --- */
+.bouton-sia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 208px;
+  height: 64px;
+  /* L'espacement des lettres laisse 4 px après le « A » : on le compense à gauche. */
+  padding: 0 0 0 4px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition:
+    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bouton-sia:disabled {
+  border-color: var(--sia-ligne);
+  color: var(--sia-eteint);
+  cursor: not-allowed;
+}
+
+.bouton-sia--allume {
+  background: var(--sia-accent);
+  border-color: var(--sia-accent);
+  color: var(--sia-sur-accent);
+}
+
+.bouton-sia--allume:disabled {
+  border-color: var(--sia-accent);
+  color: var(--sia-sur-accent);
+}
+
+.bouton-sia[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.bouton-sia:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bouton-sia:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pastille,
+  .bouton-sia {
+    transition: none;
+  }
+}

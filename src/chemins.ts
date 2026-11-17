@@ -7,6 +7,7 @@ export const CHEMINS = {
   role: '/role',
   profilPrestataire: '/profil/prestataire',
   profilClient: '/profil/client',
+  mur: '/mur',
 } as const;
 
 /** Après une inscription réussie : profil selon le rôle du code, sinon choix du rôle (E4). */

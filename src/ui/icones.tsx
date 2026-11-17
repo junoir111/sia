@@ -62,3 +62,38 @@ export function IconeCoche({ taille = 16, className }: ProprietesIcone) {
     </svg>
   );
 }
+
+export function IconeLoupe({ taille = 20, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={2}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5" />
+    </svg>
+  );
+}
+
+export function IconeCrayon({ taille = 22, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.7}>
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3L8 20l-4.5 1 1-4.5Z" />
+      <path d="m14.5 5.5 4 4" />
+    </svg>
+  );
+}
+
+export function IconeAppareilPhoto({ taille = 22, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.7}>
+      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h3L9 4.5h6L16.5 7h3A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+export function IconeCroix({ taille = 14, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={2.4}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}

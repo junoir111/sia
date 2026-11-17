@@ -44,6 +44,7 @@
   --sia-eteint: #5e7366; /* texte d'un bouton désactivé */
   --sia-contour: #2e4236; /* contour du bouton secondaire */
   --sia-case: #4b6354; /* contour d'une case vide */
+  --sia-indice: #6f8f7b; /* texte d'exemple d'un champ vide (maquette E5-modele3.jpg) */
 
   /* Mesures du brief (§4) */
   --sia-marge: 16px;
@@ -103,4 +104,22 @@ input {
   margin: 0 auto;
   padding: calc(env(safe-area-inset-top) + 8px) var(--sia-marge)
     calc(env(safe-area-inset-bottom) + 16px);
+}
+
+/* Texte lu par le lecteur d'écran mais caché à l'œil. */
+.masque {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+::placeholder {
+  color: var(--sia-indice);
+  opacity: 1;
 }

@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
 import { RoutesSia } from '../src/navigation';
+
+// Le profil prestataire lit le serveur au chargement : jamais le vrai serveur ici.
+vi.mock('../src/matrix/profil', () => ({
+  lireProfil: vi.fn().mockResolvedValue({ ok: true, profil: null }),
+  enregistrerProfil: vi.fn(),
+}));
 
 function afficher(adresse: string) {
   render(
@@ -27,11 +33,21 @@ describe('Navigation', () => {
     CHEMINS.connexion,
     CHEMINS.codeSecret,
     CHEMINS.role,
-    CHEMINS.profilPrestataire,
     CHEMINS.profilClient,
+    CHEMINS.mur,
   ])('%s affiche « Bientôt disponible »', (chemin) => {
     afficher(chemin);
     expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+  });
+
+  it('/profil/prestataire affiche le profil prestataire (avec une session)', () => {
+    localStorage.setItem(
+      'sia.session',
+      JSON.stringify({ userId: '@essai:sia', accessToken: 'faux', deviceId: 'X' }),
+    );
+    afficher(CHEMINS.profilPrestataire);
+    expect(screen.getAllByText(/Ton profil/).length).toBeGreaterThan(0);
+    localStorage.clear();
   });
 
   it("le lien de « Bientôt disponible » ramène à l'accueil", () => {
