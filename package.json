@@ -13,15 +13,19 @@
     "test": "vitest",
     "verifier": "tsc --noEmit && eslint . && vitest run",
     "format": "prettier --write .",
-    "essai-reel": "vitest run --config essais-reels/vitest.config.ts"
+    "essai-reel": "vitest run --config essais-reels/vitest.config.ts",
+    "android": "npm run build && cap sync android"
   },
   "dependencies": {
+    "@capacitor/core": "8.6.2",
     "matrix-js-sdk": "45.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "7.18.5"
   },
   "devDependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/cli": "8.6.2",
     "@eslint/js": "10.0.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
