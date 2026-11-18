@@ -1,10 +1,12 @@
 # SIA - fabrique l'APK d'essai (debug, NON signé). Aucune clé ici : la signature se fait sur le PC de l'utilisateur.
-# Déclenché par une étiquette du type essai-20261118-1530.
+# Déclenché par une étiquette essai-AAAAMMJJ-HHMM (APK normal) ou test-AAAAMMJJ-HHMM (variante TEST :
+# captures et débogage WebView permis, même identifiant et même nom de fichier).
 name: sia-apk
 on:
   push:
     tags:
       - 'essai-*'
+      - 'test-*'
 permissions:
   contents: read
 jobs:
@@ -26,7 +28,14 @@ jobs:
       - run: npm run android
       - name: Fabriquer l'APK debug
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        env:
+          ETIQUETTE: ${{ github.ref_name }}
+        run: |
+          if [[ "$ETIQUETTE" == test-* ]]; then
+            ./gradlew --no-daemon assembleDebug -PsiaTest=true
+          else
+            ./gradlew --no-daemon assembleDebug
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: sia-apk-non-signe

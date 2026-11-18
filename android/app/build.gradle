@@ -1,6 +1,12 @@
 apply plugin: 'com.android.application'
 
+// Variante TEST (captures + débogage WebView) : uniquement si Gradle reçoit -PsiaTest=true.
+def siaTest = project.hasProperty('siaTest') && project.property('siaTest') == 'true'
+
 android {
+    buildFeatures {
+        buildConfig = true
+    }
     namespace = "io.github.junoir111.sia"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
@@ -9,6 +15,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        buildConfigField "boolean", "SIA_TEST", siaTest.toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
