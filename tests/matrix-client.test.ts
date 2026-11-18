@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emetteur } from './faux-matrix';
 
-const faux = vi.hoisted(() => ({ clients: [] as unknown[], options: [] as unknown[] }));
+const faux = vi.hoisted(() => ({ clients: [] as unknown[], options: [] as unknown[], echecsInit: 0 }));
 
 vi.mock('matrix-js-sdk', async (original) => {
   const vrai = await original<typeof import('matrix-js-sdk')>();
@@ -15,7 +15,12 @@ vi.mock('matrix-js-sdk', async (original) => {
         emit: e.emit,
         getUserId: () => opts.userId,
         getDeviceId: () => opts.deviceId,
-        initRustCrypto: vi.fn(async () => undefined),
+        initRustCrypto: vi.fn(async () => {
+          if (faux.echecsInit > 0) {
+            faux.echecsInit -= 1;
+            throw new Error('account in the store does not match');
+          }
+        }),
         startClient: vi.fn(async () => undefined),
         stopClient: vi.fn(),
       };
@@ -76,6 +81,23 @@ describe('demarrerClient', () => {
     expect(clientActif()).toBe(c);
     expect(await demarrerClient(SESSION)).toBe(c);
     expect(faux.clients).toHaveLength(1);
+  });
+
+  it('réserve de clés d’un autre compte : init raté une fois, réserve effacée, puis réessai', async () => {
+    localStorage.setItem('sia.crypto-de', '@autre:sia|AUTRE');
+    const promesse = demarrerClient(SESSION);
+    await vi.waitFor(() => expect(dernier()?.initRustCrypto).toHaveBeenCalled());
+    await pret();
+    await promesse;
+    expect(localStorage.getItem('sia.crypto-de')).toBe(`${SESSION.userId}|APP`);
+  });
+
+  it('chiffrement qui échoue la 1re fois : la réserve est effacée et on réessaie une fois', async () => {
+    faux.echecsInit = 1;
+    const promesse = demarrerClient(SESSION);
+    await pret();
+    await promesse;
+    expect(dernier().initRustCrypto).toHaveBeenCalledTimes(2);
   });
 
   it('donne un journal muet au SDK', async () => {

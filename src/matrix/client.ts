@@ -74,6 +74,52 @@ function attendrePremierSync(c: MatrixClient): Promise<void> {
   });
 }
 
+/** À qui appartient la réserve de clés de ce téléphone (« userId|deviceId »). */
+const CLE_PROPRIETAIRE_CRYPTO = 'sia.crypto-de';
+
+function effacerBase(nom: string): Promise<void> {
+  return new Promise((fini) => {
+    try {
+      const requete = indexedDB.deleteDatabase(nom);
+      requete.onsuccess = requete.onerror = requete.onblocked = () => fini();
+    } catch {
+      fini();
+    }
+  });
+}
+
+/** Efface la réserve de clés de chiffrement (celle d'un autre compte ou d'un autre appareil). */
+async function effacerReserveCrypto(): Promise<void> {
+  await effacerBase(`${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto`);
+  await effacerBase(`${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto-meta`);
+}
+
+/**
+ * Prépare le chiffrement. Une réserve laissée par un AUTRE compte (changement de compte sans
+ * déconnexion propre) bloquerait le démarrage pour toujours : elle est effacée, puis on réessaie une fois.
+ */
+async function preparerChiffrement(c: MatrixClient, session: Session): Promise<void> {
+  const proprietaire = `${session.userId}|${session.deviceId}`;
+  let precedent: string | null;
+  try {
+    precedent = localStorage.getItem(CLE_PROPRIETAIRE_CRYPTO);
+  } catch {
+    precedent = null;
+  }
+  if (precedent !== null && precedent !== proprietaire) await effacerReserveCrypto();
+  try {
+    await c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO });
+  } catch {
+    await effacerReserveCrypto();
+    await c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO });
+  }
+  try {
+    localStorage.setItem(CLE_PROPRIETAIRE_CRYPTO, proprietaire);
+  } catch {
+    // Stockage refusé : la reprise par effacement ci-dessus reste le filet de sécurité.
+  }
+}
+
 async function lancer(session: Session): Promise<MatrixClient> {
   fairTaireSdk();
   const c = createClient({
@@ -84,7 +130,7 @@ async function lancer(session: Session): Promise<MatrixClient> {
     logger: silence,
   });
   try {
-    await c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO });
+    await preparerChiffrement(c, session);
     const pret = attendrePremierSync(c);
     await c.startClient({ initialSyncLimit: 20, lazyLoadMembers: true });
     await pret;
