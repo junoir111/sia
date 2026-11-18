@@ -94,6 +94,46 @@ async function effacerReserveCrypto(): Promise<void> {
   await effacerBase(`${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto-meta`);
 }
 
+/** Vrai si une réserve de clés existe déjà sur ce téléphone (faux si on ne peut pas le savoir). */
+async function reserveExiste(): Promise<boolean> {
+  try {
+    const bases = await indexedDB.databases();
+    return bases.some((b) => b.name === `${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto`);
+  } catch {
+    return false;
+  }
+}
+
+/** Au-delà, la réserve de clés est jugée bloquée (vu en vrai : init qui ne finit jamais). */
+export const DELAI_INIT_CRYPTO_MS = 25_000;
+
+/**
+ * Lance le chiffrement. S'il ne répond pas à temps, la réserve est bloquée : on demande son
+ * effacement puis on recharge la page (l'effacement passe dès que l'ancienne connexion est fermée).
+ */
+async function initAvecDelai(c: MatrixClient): Promise<void> {
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  const delai = new Promise<never>((_, rejeter) => {
+    minuterie = setTimeout(() => {
+      void effacerReserveCrypto();
+      try {
+        window.location.reload();
+      } catch {
+        // Pas de page à recharger (tests) : l'erreur suffit.
+      }
+      rejeter(new Error('Chiffrement bloqué.'));
+    }, DELAI_INIT_CRYPTO_MS);
+  });
+  try {
+    await Promise.race([
+      c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO }),
+      delai,
+    ]);
+  } finally {
+    clearTimeout(minuterie);
+  }
+}
+
 /**
  * Prépare le chiffrement. Une réserve laissée par un AUTRE compte (changement de compte sans
  * déconnexion propre) bloquerait le démarrage pour toujours : elle est effacée, puis on réessaie une fois.
@@ -106,12 +146,15 @@ async function preparerChiffrement(c: MatrixClient, session: Session): Promise<v
   } catch {
     precedent = null;
   }
-  if (precedent !== null && precedent !== proprietaire) await effacerReserveCrypto();
+  // Réserve d'un autre compte, ou réserve sans propriétaire connu (anciennes versions) : effacée.
+  if (precedent !== proprietaire && (precedent !== null || (await reserveExiste()))) {
+    await effacerReserveCrypto();
+  }
   try {
-    await c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO });
+    await initAvecDelai(c);
   } catch {
     await effacerReserveCrypto();
-    await c.initRustCrypto({ useIndexedDB: true, cryptoDatabasePrefix: PREFIXE_BASE_CRYPTO });
+    await initAvecDelai(c);
   }
   try {
     localStorage.setItem(CLE_PROPRIETAIRE_CRYPTO, proprietaire);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emetteur } from './faux-matrix';
 
-const faux = vi.hoisted(() => ({ clients: [] as unknown[], options: [] as unknown[], echecsInit: 0 }));
+const faux = vi.hoisted(() => ({ clients: [] as unknown[], options: [] as unknown[], echecsInit: 0, bloque: false }));
 
 vi.mock('matrix-js-sdk', async (original) => {
   const vrai = await original<typeof import('matrix-js-sdk')>();
@@ -16,6 +16,7 @@ vi.mock('matrix-js-sdk', async (original) => {
         getUserId: () => opts.userId,
         getDeviceId: () => opts.deviceId,
         initRustCrypto: vi.fn(async () => {
+          if (faux.bloque) await new Promise(() => undefined);
           if (faux.echecsInit > 0) {
             faux.echecsInit -= 1;
             throw new Error('account in the store does not match');
@@ -100,6 +101,20 @@ describe('demarrerClient', () => {
     expect(dernier().initRustCrypto).toHaveBeenCalledTimes(2);
   });
 
+  it('réserve de clés bloquée (init sans fin) : abandon après le délai, le démarrage échoue', async () => {
+    faux.bloque = true;
+    vi.useFakeTimers();
+    try {
+      const promesse = demarrerClient(SESSION);
+      const verdict = expect(promesse).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(2 * 25_000 + 100);
+      await verdict;
+    } finally {
+      faux.bloque = false;
+      vi.useRealTimers();
+    }
+  });
+
   it('donne un journal muet au SDK', async () => {
     const promesse = demarrerClient(SESSION);
     await pret();
@@ -139,6 +154,7 @@ describe('demarrerClient', () => {
     const premier = demarrerClient(SESSION);
     await vi.waitFor(() => expect(faux.clients).toHaveLength(1));
     const ancien = dernier();
+    await vi.waitFor(() => expect(ancien.startClient).toHaveBeenCalled());
     const second = demarrerClient(autre);
     await vi.waitFor(() => expect(faux.clients).toHaveLength(2));
     const nouveau = dernier();
