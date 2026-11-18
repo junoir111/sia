@@ -24,7 +24,8 @@ vi.mock('../src/matrix/ephemere', () => ({
   echeanceEffacement: vi.fn(() => null),
 }));
 vi.mock('../src/matrix/annuaire', () => ({ pseudoDe: vi.fn() }));
-vi.mock('../src/matrix/bulles', () => ({
+vi.mock('../src/matrix/bulles', async (importOriginal) => ({
+  lireEtat: (await importOriginal<typeof import('../src/matrix/bulles')>()).lireEtat,
   ErreurEnvoiBulle: class ErreurEnvoiBulle extends Error {
     readonly code: string;
     constructor(code: string) {

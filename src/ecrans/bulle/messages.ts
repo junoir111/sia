@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import { MatrixEventEvent, RoomEvent } from 'matrix-js-sdk';
 import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import { DUREE_MESSAGE_MS } from '../../config';
-import { nettoyerEtatBulle } from '../../logique/etat-bulle';
-import { LONGUEUR_MAX_MESSAGE } from '../../matrix/bulles';
+import { LONGUEUR_MAX_MESSAGE, lireEtat } from '../../matrix/bulles';
 import { echeanceEffacement } from '../../matrix/ephemere';
-import { TYPE_BULLE } from '../../matrix/evenements';
 
 /*
  * Messages texte d'une bulle, lus dans le fil Matrix déjà déchiffré.
@@ -37,7 +35,7 @@ function lireMessage(
 /** Les 2 comptes inscrits dans l'état io.sia.bulle, ou null si l'état est absent ou invalide. */
 function participantsDe(c: MatrixClient, roomId: string): Set<string> | null {
   const salon = c.getRoom(roomId);
-  const etat = nettoyerEtatBulle(salon?.currentState.getStateEvents(TYPE_BULLE, '')?.getContent());
+  const etat = salon ? lireEtat(salon) : null;
   if (!etat) return null;
   const participants = new Set(Object.keys(etat.participants));
   return participants.size === 2 ? participants : null;

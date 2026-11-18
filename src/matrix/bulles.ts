@@ -452,7 +452,7 @@ type EtatLu = { demande: EtatBulle['demande'] | null; participants: EtatBulle['p
 /** Valeurs neutres, jamais rendues : servent seulement à faire valider les participants. */
 const DEMANDE_NEUTRE = { annonce: '$neutre', service: 'x', zone: 'x', budget: 1, texte: '' };
 
-function lireEtat(salon: Room): EtatLu | null {
+export function lireEtat(salon: Room): EtatLu | null {
   const brut: unknown = salon.currentState.getStateEvents(TYPE_BULLE, '')?.getContent();
   if (estObjet(brut) && brut.demande === undefined) {
     const sans = nettoyerEtatBulle({ ...brut, demande: DEMANDE_NEUTRE });
