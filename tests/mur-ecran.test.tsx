@@ -134,16 +134,36 @@ describe('Écrans du Mur', () => {
   });
 
   describe('Le Mur', () => {
-    it('montre la grille, la phrase et le rond d’initiale', async () => {
+    it('montre seulement les métiers avec des prestataires, sans phrase de demandes, et le rond d’initiale', async () => {
       afficher(CHEMINS.mur);
       expect(screen.getByRole('heading', { name: 'Le Mur' })).toBeInTheDocument();
-      expect(screen.getByText('1 client cherche quelqu’un en ce moment')).toBeInTheDocument();
+      expect(screen.queryByText(/client/i)).not.toBeInTheDocument();
       const plombier = screen.getByRole('link', { name: /Plombier/ });
       expect(within(plombier).getByText('2 dispo')).toBeInTheDocument();
-      expect(within(plombier).getByText('1 demande')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /Peintre/ })).toHaveTextContent('personne ici');
+      expect(plombier).not.toHaveTextContent(/demande/);
+      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+      expect(screen.queryByRole('link', { name: /Peintre/ })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Mon compte' })).toHaveTextContent('M');
       await waitFor(() => expect(screen.getByRole('link', { name: 'Publier une demande' })));
+    });
+
+    it('aucun prestataire : message d’état vide', () => {
+      murSimule([], DEMANDES);
+      afficher(CHEMINS.mur);
+      expect(screen.getByText('Aucun prestataire disponible pour l’instant.')).toBeInTheDocument();
+    });
+
+    it('un quartier sans prestataire : « Personne de disponible ici. »', () => {
+      afficher(CHEMINS.mur);
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Port-Gentil' } });
+      expect(screen.getByText('Personne de disponible ici.')).toBeInTheDocument();
+    });
+
+    it('un métier absent du Mur est traité comme un quartier', () => {
+      afficher(CHEMINS.mur);
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Peintre' } });
+      expect(lieu()).toBe('/mur?quartier=Peintre');
+      expect(screen.getByText('Personne de disponible ici.')).toBeInTheDocument();
     });
 
     it('un quartier tapé filtre les chiffres et reste dans l’adresse', () => {
@@ -151,7 +171,6 @@ describe('Écrans du Mur', () => {
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Owendo' } });
       const plombier = screen.getByRole('link', { name: /Plombier/ });
       expect(within(plombier).getByText('1 dispo')).toBeInTheDocument();
-      expect(within(plombier).getByText('aucune demande')).toBeInTheDocument();
       expect(lieu()).toBe('/mur?quartier=Owendo');
       expect(plombier).toHaveAttribute('href', '/mur/metier/Plombier?quartier=Owendo');
     });
@@ -208,7 +227,7 @@ describe('Écrans du Mur', () => {
     it('reprend le quartier de l’adresse', () => {
       afficher(cheminMur('Akanda'));
       expect(screen.getByRole('searchbox')).toHaveValue('Akanda');
-      expect(screen.getByText('1 client cherche à Akanda')).toBeInTheDocument();
+      expect(within(screen.getByRole('link', { name: /Plombier/ })).getByText('1 dispo')).toBeInTheDocument();
     });
 
     it('toucher une case ouvre la liste du métier avec le quartier', () => {
@@ -257,13 +276,13 @@ describe('Écrans du Mur', () => {
   });
 
   describe('Liste d’un métier', () => {
-    it('titre avec le quartier, disponibles puis demandes, flèche retour avec le quartier', () => {
+    it('titre avec le quartier, disponibles seulement (jamais de demandes), flèche retour avec le quartier', () => {
       afficher(cheminListeMetier('Plombier', 'Akanda'));
       expect(screen.getByRole('heading', { name: 'Plombier · Akanda' })).toBeInTheDocument();
       expect(
         screen.getByRole('heading', { name: 'Disponibles maintenant · 1' }),
       ).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Demande de client · 1' })).toBeInTheDocument();
+      expect(screen.queryByText(/Demande/)).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Retour' })).toHaveAttribute(
         'href',
         '/mur?quartier=Akanda',
@@ -272,8 +291,6 @@ describe('Écrans du Mur', () => {
         'href',
         '/mur/prestataire/%24p1?metier=Plombier&quartier=Akanda',
       );
-      expect(screen.getByText('il y a 12 min')).toBeInTheDocument();
-      expect(screen.getByText('Akanda · 5 000 FCFA · Plombier')).toBeInTheDocument();
     });
 
     it('la modalité s’affiche sur la carte quand elle est connue, pas sinon', () => {

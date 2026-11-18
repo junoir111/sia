@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CHEMINS, cheminListeMetier } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
-import { grilleMur, phraseMur } from '../../logique/mur';
+import { grilleMur } from '../../logique/mur';
 import { pseudoPropose } from '../../logique/profil';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonRond } from '../../ui/BoutonRond';
@@ -37,13 +37,12 @@ export function Mur() {
   );
   const [compteOuvert, setCompteOuvert] = useState(false);
 
-  // Le texte tapé est un métier s'il en existe un qui le contient ; sinon, c'est un quartier.
+  // Le texte tapé est un métier s'il en existe un (présent sur le Mur) qui le contient ; sinon, c'est un quartier.
   const parMetier =
     texte.trim() !== '' &&
-    grilleMur(vue.statuts, vue.demandes, { recherche: texte, maintenant: vue.maintenant }).length >
-      0;
+    grilleMur(vue.statuts, { recherche: texte, maintenant: vue.maintenant }).length > 0;
   const quartier = parMetier || texte.trim() === '' ? undefined : texte.trim();
-  const tuiles = grilleMur(vue.statuts, vue.demandes, {
+  const tuiles = grilleMur(vue.statuts, {
     quartier,
     recherche: parMetier ? texte : undefined,
     maintenant: vue.maintenant,
@@ -52,7 +51,6 @@ export function Mur() {
   const nouveauDernier = texte.trim() === '' ? undefined : (quartier ?? dernierQuartier);
   if (nouveauDernier !== dernierQuartier) setDernierQuartier(nouveauDernier);
   const quartierLien = nouveauDernier;
-  const phrase = phraseMur(vue.demandes, quartier, vue.maintenant);
 
   // Le quartier (et le métier tapé) restent dans l'adresse : pages filles et retour les reprennent.
   const cible = quartierLien ?? '';
@@ -99,20 +97,22 @@ export function Mur() {
   let contenu;
   if (reseauKo) contenu = <Bandeau message={PAS_DE_RESEAU} />;
   else if (!vue.pret) contenu = <p className="mur__attente">Chargement…</p>;
-  else
+  else if (tuiles.length === 0) {
+    const filtre = texte.trim() !== '';
     contenu = (
-      <>
-        <p className="mur__phrase" aria-live="polite">
-          {phrase}
-        </p>
-        <ul className="mur__grille">
-          {tuiles.map((t) => (
-            <li key={t.metier} onClickCapture={memoriser}>
-              <TuileMetier tuile={t} to={cheminListeMetier(t.metier, quartierLien)} />
-            </li>
-          ))}
-        </ul>
-      </>
+      <p className="mur__attente" aria-live="polite">
+        {filtre ? 'Personne de disponible ici.' : 'Aucun prestataire disponible pour l’instant.'}
+      </p>
+    );
+  } else
+    contenu = (
+      <ul className="mur__grille">
+        {tuiles.map((t) => (
+          <li key={t.metier} onClickCapture={memoriser}>
+            <TuileMetier tuile={t} to={cheminListeMetier(t.metier, quartierLien)} />
+          </li>
+        ))}
+      </ul>
     );
 
   return (
