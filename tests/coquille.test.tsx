@@ -137,6 +137,22 @@ describe('FournisseurMatrix', () => {
     expect(screen.queryByText('bandeau')).not.toBeInTheDocument();
   });
 
+  it('après un échec passager, le démarrage est retenté tout seul et l’appli devient prête', async () => {
+    connecte();
+    faux.rejoindreMur.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      afficher(CHEMINS.bulles);
+      expect(await screen.findByText('bulles erreur-reseau')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_500);
+      });
+      expect(await screen.findByText('bulles pret')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("un ménage d'annonces raté n'empêche pas l'appli d'être prête", async () => {
     connecte();
     faux.nettoyerMesAnnonces.mockRejectedValue(new TypeError('Failed to fetch'));

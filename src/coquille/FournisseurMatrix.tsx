@@ -18,6 +18,8 @@ export type EtatMatrix = 'demarrage' | 'pret' | 'erreur-session' | 'erreur-resea
 export type ValeurMatrix = { client: MatrixClient | null; etat: EtatMatrix };
 
 const AU_DEPART: ValeurMatrix = { client: null, etat: 'demarrage' };
+/** Attentes entre deux reprises du démarrage après un échec passager (la dernière se répète). */
+export const DELAIS_REPRISE_MS = [2_000, 5_000, 10_000, 20_000] as const;
 const ContexteMatrix = createContext<ValeurMatrix>(AU_DEPART);
 
 /** Client Matrix partagé et son état. `client` n'est non nul que si `etat === 'pret'`. */
@@ -61,25 +63,41 @@ export function FournisseurMatrix({ children }: { children: ReactNode }) {
     const courante = lireSession();
     if (cle === null || !courante) return;
     let enCours = true;
-    demarrer(courante).then(
-      (client) => {
-        if (enCours) setEtat({ cle, client, etat: 'pret' });
-      },
-      (erreur: unknown) => {
-        if (!enCours) return;
-        if (estJetonRefuse(erreur)) {
-          arreterClient();
-          effacerSession();
-          // Session effacée : l'état est rangé sous « pas de session » (cle null).
-          setEtat({ cle: null, client: null, etat: 'erreur-session' });
-          navigateRef.current(CHEMINS.accueil, { replace: true });
-          return;
-        }
-        setEtat({ cle, client: null, etat: 'erreur-reseau' });
-      },
-    );
+    let essai = 0;
+    let minuterie: ReturnType<typeof setTimeout> | undefined;
+    // Échec passager (réseau, serveur occupé) : on réessaie tout seul, de plus en plus lentement.
+    const relancer = (): void => {
+      clearTimeout(minuterie);
+      if (enCours) lancer();
+    };
+    const lancer = (): void => {
+      demarrer(courante).then(
+        (client) => {
+          if (enCours) setEtat({ cle, client, etat: 'pret' });
+        },
+        (erreur: unknown) => {
+          if (!enCours) return;
+          if (estJetonRefuse(erreur)) {
+            arreterClient();
+            effacerSession();
+            // Session effacée : l'état est rangé sous « pas de session » (cle null).
+            setEtat({ cle: null, client: null, etat: 'erreur-session' });
+            navigateRef.current(CHEMINS.accueil, { replace: true });
+            return;
+          }
+          setEtat({ cle, client: null, etat: 'erreur-reseau' });
+          const delai = DELAIS_REPRISE_MS[Math.min(essai, DELAIS_REPRISE_MS.length - 1)];
+          essai += 1;
+          minuterie = setTimeout(relancer, delai);
+        },
+      );
+    };
+    lancer();
+    window.addEventListener('online', relancer);
     return () => {
       enCours = false;
+      clearTimeout(minuterie);
+      window.removeEventListener('online', relancer);
       arreterClient();
     };
   }, [cle]);
