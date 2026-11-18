@@ -11,8 +11,10 @@ import {
   bulleSaine,
   envoyerMessage,
   listerBulles,
+  reessayerMessage,
   signalerEcriture,
   silenceRadio,
+  surveillerBulle,
 } from '../src/matrix/bulles';
 import type { ResumeBulle } from '../src/matrix/bulles';
 import { marquerAffiche } from '../src/matrix/ephemere';
@@ -39,8 +41,10 @@ vi.mock('../src/matrix/bulles', async (importOriginal) => ({
   ecouterBulles: vi.fn(() => () => undefined),
   listerBulles: vi.fn(),
   envoyerMessage: vi.fn(),
+  reessayerMessage: vi.fn(),
   signalerEcriture: vi.fn(),
   silenceRadio: vi.fn(),
+  surveillerBulle: vi.fn(),
 }));
 
 const MOI = '@moi:sia';
@@ -55,6 +59,10 @@ type FauxEv = {
   efface?: boolean;
   enClair?: boolean;
   illisible?: boolean;
+  /** Statut d'un écho local (null : événement venu du serveur). */
+  status?: string | null;
+  txn?: string;
+  roomId?: string;
 };
 
 const ETAT_BULLE = {
@@ -71,7 +79,9 @@ function fauxEvenement(e: FauxEv) {
     getType: () => e.type ?? 'm.room.message',
     getContent: () => ({ msgtype: 'm.text', body: e.body }),
     getSender: () => e.sender,
-    getRoomId: () => SALON,
+    getRoomId: () => e.roomId ?? SALON,
+    status: e.status ?? null,
+    getTxnId: () => e.txn,
     isRedacted: () => e.efface === true,
     isState: () => false,
     isEncrypted: () => e.enClair !== true,
@@ -151,6 +161,10 @@ describe('Écran Bulle (M4)', () => {
     vi.mocked(bulleSaine).mockReset().mockReturnValue(true);
     vi.mocked(accepterNouvelAppareil).mockReset().mockResolvedValue(undefined);
     vi.mocked(pseudoDe).mockReset().mockReturnValue(null);
+    vi.mocked(reessayerMessage).mockReset().mockResolvedValue('$m9');
+    vi.mocked(surveillerBulle)
+      .mockReset()
+      .mockReturnValue(() => undefined);
   });
 
   it('en-tête, la demande, le rappel et les messages (effacés cachés)', () => {
@@ -300,5 +314,109 @@ describe('Écran Bulle (M4)', () => {
     afficher();
     fireEvent.click(screen.getByRole('button', { name: 'Le Mur' }));
     expect(screen.getByText('écran mur')).toBeInTheDocument();
+  });
+
+  it('ouvrir la bulle lance la surveillance (vérifications faites une fois)', () => {
+    afficher();
+    expect(surveillerBulle).toHaveBeenCalledWith(client, SALON);
+  });
+
+  it('mon message en cours d’envoi s’affiche tout de suite avec « envoi… »', () => {
+    client = fauxClient([
+      {
+        id: '~e1',
+        body: 'tout de suite',
+        sender: MOI,
+        enClair: true,
+        status: 'sending',
+        txn: 't1',
+      },
+    ]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    afficher();
+    expect(screen.getByText('tout de suite')).toBeInTheDocument();
+    expect(screen.getByText('envoi…')).toBeInTheDocument();
+  });
+
+  it('écho local refusé s’il n’est pas à moi, pas de ce salon, ou annulé', () => {
+    client = fauxClient([
+      { id: '~e1', body: 'faux écho', sender: AUTRE, enClair: true, status: 'sending' },
+      {
+        id: '~e2',
+        body: 'autre salon',
+        sender: MOI,
+        enClair: true,
+        status: 'sending',
+        roomId: '!ailleurs:sia',
+      },
+      { id: '~e3', body: 'annulé', sender: MOI, enClair: true, status: 'cancelled' },
+      { id: '~e4', body: 'statut inconnu', sender: MOI, enClair: true, status: 'bizarre' },
+      { id: '$e5', body: 'en clair à moi', sender: MOI, enClair: true },
+    ]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    afficher();
+    for (const texte of [
+      'faux écho',
+      'autre salon',
+      'annulé',
+      'statut inconnu',
+      'en clair à moi',
+    ]) {
+      expect(screen.queryByText(texte)).not.toBeInTheDocument();
+    }
+  });
+
+  it('message confirmé : plus de « envoi… »', () => {
+    client = fauxClient([{ id: '$ok', body: 'parti', sender: MOI, status: 'sent', txn: 't2' }]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    afficher();
+    expect(screen.getByText('parti')).toBeInTheDocument();
+    expect(screen.queryByText('envoi…')).not.toBeInTheDocument();
+  });
+
+  it('pas envoyé : toucher pour réessayer renvoie ce message', () => {
+    client = fauxClient([
+      { id: '~rate', body: 'raté', sender: MOI, enClair: true, status: 'not_sent', txn: 't3' },
+    ]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    afficher();
+    fireEvent.click(screen.getByRole('button', { name: 'pas envoyé, toucher pour réessayer' }));
+    expect(reessayerMessage).toHaveBeenCalledWith(client, SALON, '~rate');
+  });
+
+  it('le champ se vide dès le toucher « envoyer », sans attendre le serveur', () => {
+    vi.mocked(envoyerMessage).mockReturnValue(new Promise(() => undefined));
+    afficher();
+    fireEvent.change(champ(), { target: { value: 'Vite' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    expect(champ()).toHaveValue('');
+    expect(envoyerMessage).toHaveBeenCalledWith(client, SALON, 'Vite');
+    expect(screen.getByRole('button', { name: 'Envoyer' })).toBeEnabled();
+  });
+
+  it('la touche Entrée envoie', () => {
+    afficher();
+    fireEvent.change(champ(), { target: { value: 'Par Entrée' } });
+    fireEvent.keyDown(champ(), { key: 'Enter' });
+    expect(envoyerMessage).toHaveBeenCalledTimes(1);
+    expect(envoyerMessage).toHaveBeenCalledWith(client, SALON, 'Par Entrée');
+    expect(champ()).toHaveValue('');
+  });
+
+  it('Entrée sur un champ vide n’envoie rien', () => {
+    afficher();
+    fireEvent.keyDown(champ(), { key: 'Enter' });
+    expect(envoyerMessage).not.toHaveBeenCalled();
+  });
+
+  it('échec réseau après affichage : pas de bandeau, le champ reste vide', async () => {
+    vi.mocked(envoyerMessage).mockRejectedValue(new ErreurEnvoiBulle('pas-envoye'));
+    afficher();
+    fireEvent.change(champ(), { target: { value: 'Coupé' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    await vi.waitFor(() => expect(envoyerMessage).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(champ()).toHaveValue('');
   });
 });

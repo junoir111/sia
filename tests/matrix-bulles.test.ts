@@ -12,10 +12,13 @@ import {
   fermerBullesRefusees,
   listerBulles,
   LONGUEUR_MAX_MESSAGE,
+  reessayerMessage,
   silenceRadio,
+  surveillerBulle,
 } from '../src/matrix/bulles';
 import { oublierMur } from '../src/matrix/mur';
 import { AUTRE, MOI, MUR, comme, evenement, fauxClient, salon } from './faux-matrix';
+import type { FauxClient } from './faux-matrix';
 
 const MAINTENANT = Date.UTC(2026, 10, 17, 10, 0, 0);
 const BULLE = '!b1:sia.tail94dc60.ts.net';
@@ -339,6 +342,158 @@ describe('envoyerMessage', () => {
       envoyerMessage(comme(c), BULLE, 'x'.repeat(LONGUEUR_MAX_MESSAGE + 1)),
     ).rejects.toThrow();
     expect(c.sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('envoi rapide (bulle surveillée)', () => {
+  /** Laisse finir les vérifications lancées en arrière-plan (aucun réseau : tout est simulé). */
+  async function vider(): Promise<void> {
+    for (let i = 0; i < 30; i += 1) await Promise.resolve();
+  }
+
+  /** Client dont le module de chiffrement compte les demandes d'appareils. */
+  function clientCompte(membres: Record<string, { membership: string }>) {
+    const s = salon({
+      roomId: BULLE,
+      appartenance: 'join',
+      createur: MOI,
+      membres,
+      etat: etatChiffre(),
+      evenements: [],
+    });
+    const c = fauxClient([s], true, { [AUTRE]: ['TEL1'] });
+    const crypto = c.getCrypto();
+    const demandes = vi.fn(crypto?.getUserDeviceInfo);
+    vi.spyOn(c, 'getCrypto').mockReturnValue(crypto && { ...crypto, getUserDeviceInfo: demandes });
+    return { c, s, demandes };
+  }
+
+  function aDeux() {
+    return { [MOI]: { membership: 'join' }, [AUTRE]: { membership: 'join' } };
+  }
+
+  function membresChanges(c: FauxClient): void {
+    c.emit('RoomState.members', evenement({ type: 'm.room.member' }), { roomId: BULLE }, {});
+  }
+
+  it('après l’ouverture, un message ne coûte plus que sendMessage', async () => {
+    const { c, s, demandes } = clientCompte(aDeux());
+    const arreter = surveillerBulle(comme(c), BULLE);
+    await vider();
+    expect(demandes).toHaveBeenCalledTimes(1);
+    demandes.mockClear();
+    s.loadMembersIfNeeded.mockClear();
+    const envoi = envoyerMessage(comme(c), BULLE, 'Salut');
+    // sendMessage part aussitôt, sans attendre d'autre réponse.
+    expect(c.sendMessage).toHaveBeenCalledWith(BULLE, { msgtype: 'm.text', body: 'Salut' });
+    await envoi;
+    await envoyerMessage(comme(c), BULLE, 'Encore');
+    expect(demandes).not.toHaveBeenCalled();
+    expect(s.loadMembersIfNeeded).not.toHaveBeenCalled();
+    expect(c.sendMessage).toHaveBeenCalledTimes(2);
+    arreter();
+  });
+
+  it('nouvel appareil annoncé : le prochain envoi est refusé, rien ne part', async () => {
+    const { c } = clientCompte(aDeux());
+    const arreter = surveillerBulle(comme(c), BULLE);
+    await vider();
+    c.appareils[AUTRE] = ['TEL1', 'ESPION'];
+    c.emit('crypto.devicesUpdated', [AUTRE], false);
+    await vider();
+    const refus: unknown = await envoyerMessage(comme(c), BULLE, 'x').catch((e: unknown) => e);
+    expect(refus).toBeInstanceOf(ErreurEnvoiBulle);
+    expect((refus as ErreurEnvoiBulle).code).toBe('nouvel-appareil');
+    expect(c.sendMessage).not.toHaveBeenCalled();
+    await accepterNouvelAppareil(comme(c), BULLE);
+    await envoyerMessage(comme(c), BULLE, 'y');
+    expect(c.sendMessage).toHaveBeenCalledTimes(1);
+    arreter();
+  });
+
+  it('un 3e membre arrivé : refus immédiat (état en mémoire), bulle quittée', async () => {
+    const membres: Record<string, { membership: string }> = aDeux();
+    const { c } = clientCompte(membres);
+    const arreter = surveillerBulle(comme(c), BULLE);
+    await vider();
+    membres[INTRUS] = { membership: 'join' };
+    await expect(envoyerMessage(comme(c), BULLE, 'x')).rejects.toThrow(/invalide/);
+    expect(c.sendMessage).not.toHaveBeenCalled();
+    expect(c.leave).toHaveBeenCalledWith(BULLE);
+    arreter();
+  });
+
+  it('les membres changent : les vérifications sont refaites', async () => {
+    const { c, s } = clientCompte(aDeux());
+    const arreter = surveillerBulle(comme(c), BULLE);
+    await vider();
+    s.loadMembersIfNeeded.mockClear();
+    membresChanges(c);
+    await vider();
+    expect(s.loadMembersIfNeeded).toHaveBeenCalledTimes(1);
+    arreter();
+  });
+
+  it('sans surveillance, chaque envoi refait toutes les vérifications', async () => {
+    const { c, demandes } = clientCompte(aDeux());
+    const arreter = surveillerBulle(comme(c), BULLE);
+    await vider();
+    arreter();
+    demandes.mockClear();
+    await envoyerMessage(comme(c), BULLE, 'a');
+    await envoyerMessage(comme(c), BULLE, 'b');
+    expect(demandes).toHaveBeenCalledTimes(2);
+  });
+
+  it('serveur injoignable : ErreurEnvoiBulle « pas-envoye » (message réessayable)', async () => {
+    const { c } = clientCompte(aDeux());
+    c.sendMessage.mockRejectedValueOnce(new Error('réseau'));
+    const refus: unknown = await envoyerMessage(comme(c), BULLE, 'x').catch((e: unknown) => e);
+    expect((refus as ErreurEnvoiBulle).code).toBe('pas-envoye');
+    expect(localStorage.getItem('sia.a-effacer')).toBeNull();
+  });
+});
+
+describe('reessayerMessage', () => {
+  function echo(sender: string, status: string | null) {
+    const ev = evenement({
+      type: 'm.room.message',
+      id: '~local',
+      sender,
+      roomId: BULLE,
+      content: { msgtype: 'm.text', body: 'raté' },
+    });
+    ev.status = status as MatrixEvent['status'];
+    return ev;
+  }
+
+  function avec(ev: MatrixEvent) {
+    const s = salon({
+      roomId: BULLE,
+      appartenance: 'join',
+      createur: MOI,
+      membres: { [MOI]: { membership: 'join' }, [AUTRE]: { membership: 'join' } },
+      etat: etatChiffre(),
+      evenements: [ev],
+    });
+    return fauxClient([s], true, { [AUTRE]: ['TEL1'] });
+  }
+
+  it('renvoie mon message « pas envoyé » et lance son effacement', async () => {
+    const ev = echo(MOI, 'not_sent');
+    const c = avec(ev);
+    const id = await reessayerMessage(comme(c), BULLE, '~local');
+    expect(c.resendEvent).toHaveBeenCalledWith(ev, c.salons[0]);
+    expect(localStorage.getItem('sia.a-effacer')).toContain(id);
+  });
+
+  it('refuse un message d’un autre, déjà envoyé, ou inconnu', async () => {
+    for (const ev of [echo(AUTRE, 'not_sent'), echo(MOI, 'sending'), echo(MOI, null)]) {
+      const c = avec(ev);
+      await expect(reessayerMessage(comme(c), BULLE, '~local')).rejects.toThrow();
+      await expect(reessayerMessage(comme(c), BULLE, '~autre')).rejects.toThrow();
+      expect(c.resendEvent).not.toHaveBeenCalled();
+    }
   });
 });
 

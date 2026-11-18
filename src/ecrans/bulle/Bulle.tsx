@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, FormEvent } from 'react';
+import type { CSSProperties, FormEvent, KeyboardEvent } from 'react';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CHEMINS } from '../../chemins';
@@ -13,8 +13,10 @@ import {
   accepterNouvelAppareil,
   bulleSaine,
   envoyerMessage,
+  reessayerMessage,
   signalerEcriture,
   silenceRadio,
+  surveillerBulle,
 } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { marquerAffiche } from '../../matrix/ephemere';
@@ -40,6 +42,11 @@ function estNouvelAppareil(e: unknown): boolean {
   return e instanceof ErreurEnvoiBulle && e.code === 'nouvel-appareil';
 }
 
+/** Le message est déjà dans le fil, marqué « pas envoyé » : pas de bandeau en plus. */
+function estPasEnvoye(e: unknown): boolean {
+  return e instanceof ErreurEnvoiBulle && e.code === 'pas-envoye';
+}
+
 function messageErreur(e: unknown): string {
   return familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME;
 }
@@ -49,15 +56,30 @@ function garderMontants(texte: string): string {
   return texte.replace(/(\d) (?=\d{3}\b)/g, '$1\u00a0');
 }
 
+/** Sous mon message : « envoi… » pendant l'envoi, « pas envoyé » (touchable) en cas d'échec. */
+function EtatEnvoiMessage({ message, onReessayer }: { message: Message; onReessayer: () => void }) {
+  if (!message.moi || message.envoi === 'confirme') return null;
+  if (message.envoi === 'en-cours') {
+    return <span className="message__envoi">envoi…</span>;
+  }
+  return (
+    <button type="button" className="message__echec" onClick={onReessayer}>
+      pas envoyé, toucher pour réessayer
+    </button>
+  );
+}
+
 /** Un message ; la fine barre se vide jusqu'à son effacement (1 minute après affichage). */
 function BulleMessage({
   c,
   roomId,
   message,
+  onReessayer,
 }: {
   c: MatrixClient;
   roomId: string;
   message: Message;
+  onReessayer: (id: string) => void;
 }) {
   const [reste] = useState(() => tempsRestant(message.id, Date.now()));
   useEffect(() => {
@@ -75,6 +97,7 @@ function BulleMessage({
       <span className="message__piste" aria-hidden="true">
         <span className="message__temps" style={style} />
       </span>
+      <EtatEnvoiMessage message={message} onReessayer={() => onReessayer(message.id)} />
     </li>
   );
 }
@@ -119,12 +142,16 @@ export function Bulle() {
   const bulles = useBulles(client);
   const messages = useMessages(client, roomId);
   const [texte, setTexte] = useState('');
-  const [envoi, setEnvoi] = useState(false);
   const [bandeau, setBandeau] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState(false);
   const [effacement, setEffacement] = useState(false);
   const [erreurSilence, setErreurSilence] = useState<string | null>(null);
-  const [appareil, setAppareil] = useState<{ corps: string; erreur: string | null } | null>(null);
+  /** Envoi bloqué par un nouvel appareil : texte à envoyer, ou `id` du message à réessayer. */
+  const [appareil, setAppareil] = useState<{
+    corps: string;
+    erreur: string | null;
+    id?: string;
+  } | null>(null);
   const [acceptation, setAcceptation] = useState(false);
   const dernierSignal = useRef(0);
   const fin = useRef<HTMLDivElement>(null);
@@ -148,6 +175,12 @@ export function Bulle() {
     return () => clearTimeout(minuterie);
   }, [pasSure, navigate]);
 
+  // Vérifications lourdes (chiffrement, 2 membres, appareils) faites à l'ouverture, puis à chaque changement.
+  useEffect(() => {
+    if (!client || !saine) return;
+    return surveillerBulle(client, roomId);
+  }, [client, roomId, saine]);
+
   useEffect(() => {
     fin.current?.scrollIntoView?.({ block: 'end' });
   }, [messages.length]);
@@ -170,23 +203,42 @@ export function Bulle() {
     void signalerEcriture(client, roomId, !vide).catch(() => undefined);
   }
 
-  async function envoyer(e: FormEvent) {
-    e.preventDefault();
+  /** Échec avant l'envoi : le texte revient dans le champ (s'il est resté vide). */
+  function echecEnvoi(erreur: unknown, corps: string) {
+    if (estPasEnvoye(erreur)) return;
+    setTexte((actuel) => (actuel === '' ? corps : actuel));
+    if (estNouvelAppareil(erreur)) setAppareil({ corps, erreur: null });
+    else setBandeau(messageErreur(erreur));
+  }
+
+  /** Le champ se vide tout de suite ; le message s'affiche aussitôt (écho local, « envoi… »). */
+  function envoyer(e?: FormEvent) {
+    e?.preventDefault();
     const corps = texte.trim();
-    if (!client || !peutEcrire || envoi || corps === '') return;
-    setEnvoi(true);
+    if (!client || !peutEcrire || corps === '') return;
+    setTexte('');
     setBandeau(null);
-    try {
-      await envoyerMessage(client, roomId, corps);
-      setTexte('');
-      dernierSignal.current = 0;
-      void signalerEcriture(client, roomId, false).catch(() => undefined);
-    } catch (erreur) {
-      if (estNouvelAppareil(erreur)) setAppareil({ corps, erreur: null });
-      else setBandeau(messageErreur(erreur));
-    } finally {
-      setEnvoi(false);
-    }
+    dernierSignal.current = 0;
+    void signalerEcriture(client, roomId, false).catch(() => undefined);
+    void envoyerMessage(client, roomId, corps).catch((erreur: unknown) =>
+      echecEnvoi(erreur, corps),
+    );
+  }
+
+  /** Entrée envoie (sauf pendant une saisie en cours de composition du clavier). */
+  function toucheChamp(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    envoyer();
+  }
+
+  function reessayer(id: string) {
+    if (!client || !peutEcrire) return;
+    setBandeau(null);
+    void reessayerMessage(client, roomId, id).catch((erreur: unknown) => {
+      if (estNouvelAppareil(erreur)) setAppareil({ corps: '', erreur: null, id });
+      else if (!estPasEnvoye(erreur)) setBandeau(messageErreur(erreur));
+    });
   }
 
   /** L'autre a un nouvel appareil : l'utilisateur lui fait confiance, on accepte puis on renvoie. */
@@ -195,13 +247,19 @@ export function Bulle() {
     setAcceptation(true);
     try {
       await accepterNouvelAppareil(client, roomId);
-      await envoyerMessage(client, roomId, appareil.corps);
+      const envoi =
+        appareil.id === undefined
+          ? envoyerMessage(client, roomId, appareil.corps)
+          : reessayerMessage(client, roomId, appareil.id);
+      if (appareil.id === undefined) setTexte('');
       setAppareil(null);
-      setTexte('');
       dernierSignal.current = 0;
       void signalerEcriture(client, roomId, false).catch(() => undefined);
+      await envoi.catch((erreur: unknown) => {
+        if (!estPasEnvoye(erreur)) throw erreur;
+      });
     } catch (erreur) {
-      setAppareil({ corps: appareil.corps, erreur: messageErreur(erreur) });
+      setAppareil({ ...appareil, erreur: messageErreur(erreur) });
     } finally {
       setAcceptation(false);
     }
@@ -266,7 +324,13 @@ export function Bulle() {
         {client && saine && messages.length > 0 && (
           <ol className="bulle__messages" aria-label="Messages">
             {messages.map((m) => (
-              <BulleMessage key={m.id} c={client} roomId={roomId} message={m} />
+              <BulleMessage
+                key={m.cle}
+                c={client}
+                roomId={roomId}
+                message={m}
+                onReessayer={reessayer}
+              />
             ))}
           </ol>
         )}
@@ -288,16 +352,17 @@ export function Bulle() {
             placeholder="Écris un message"
             maxLength={LONGUEUR_MAX_MESSAGE}
             autoComplete="off"
+            enterKeyHint="send"
             value={texte}
             disabled={!peutEcrire}
             onChange={(e) => ecrire(e.target.value)}
+            onKeyDown={toucheChamp}
           />
           <button
             type="submit"
             className="bulle__envoyer"
             aria-label="Envoyer"
-            disabled={!peutEcrire || envoi}
-            aria-busy={envoi || undefined}
+            disabled={!peutEcrire}
           >
             <IconeEnvoyer />
           </button>

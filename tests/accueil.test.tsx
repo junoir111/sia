@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
@@ -11,12 +11,24 @@ function afficher() {
         <Route path={CHEMINS.accueil} element={<Accueil />} />
         <Route path={CHEMINS.inscription} element={<p>écran inscription</p>} />
         <Route path={CHEMINS.connexion} element={<p>écran connexion</p>} />
+        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 describe('Accueil (E1)', () => {
+  afterEach(() => localStorage.clear());
+
+  it('déjà connecté : l’appli rouverte mène droit au Mur', () => {
+    localStorage.setItem(
+      'sia.session',
+      JSON.stringify({ userId: '@a:sia', accessToken: 'jeton', deviceId: 'APP' }),
+    );
+    afficher();
+    expect(screen.getByText('écran mur')).toBeInTheDocument();
+  });
+
   it('affiche le nom SIA et la mention « sur invitation »', () => {
     afficher();
     expect(screen.getByRole('heading', { name: 'SIA' })).toBeInTheDocument();

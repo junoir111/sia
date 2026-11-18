@@ -128,6 +128,7 @@ export function fauxClient(
     joinRoom: vi.fn(async (id: string) => salons.find((s) => s.roomId === id) ?? { roomId: MUR }),
     sendEvent: vi.fn(async () => ({ event_id: `$envoye${++n}` })),
     sendMessage: vi.fn(async () => ({ event_id: `$message${++n}` })),
+    resendEvent: vi.fn(async () => ({ event_id: `$renvoye${++n}` })),
     redactEvent: vi.fn(async () => ({ event_id: `$efface${++n}` })),
     createRoom: vi.fn(async () => ({ room_id: '!bulle:sia.tail94dc60.ts.net' })),
     invite: vi.fn(async () => ({})),

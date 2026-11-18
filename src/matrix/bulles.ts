@@ -1,5 +1,6 @@
 import {
   ClientEvent,
+  EventStatus,
   KnownMembership,
   MsgType,
   Preset,
@@ -8,8 +9,11 @@ import {
   RoomStateEvent,
   Visibility,
   type MatrixClient,
+  type MatrixEvent,
   type Room,
+  type RoomState,
 } from 'matrix-js-sdk';
+import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
 import type { DemandeClient } from '../logique/demande';
 import {
   etatAffiche,
@@ -72,8 +76,11 @@ const CLE_APPAREILS = 'sia.appareils';
 const BULLES_MAX_APPAREILS = 200;
 const APPAREILS_MAX = 100;
 
-/** Erreur d'envoi que l'écran doit traiter à part. */
-export type ErreurEnvoi = 'nouvel-appareil';
+/**
+ * Erreur d'envoi que l'écran doit traiter à part. `pas-envoye` : le message est déjà affiché (écho local)
+ * mais le serveur ne l'a pas reçu ; il reste dans le fil avec « toucher pour réessayer ».
+ */
+export type ErreurEnvoi = 'nouvel-appareil' | 'pas-envoye';
 export class ErreurEnvoiBulle extends Error {
   readonly code: ErreurEnvoi;
   constructor(code: ErreurEnvoi) {
@@ -168,15 +175,14 @@ function autreDe(
   if (verdict.statut !== 'saine' && verdict.statut !== 'autre-partie') return null;
   if (verdict.statut === 'autre-partie') return { autreId: verdict.autreId, ouverte: null };
   const etablie = salon.getMember(verdict.autreId)?.membership === KnownMembership.Join;
-  return { autreId: verdict.autreId, ouverte: { roomId: salon.roomId, autreId: verdict.autreId, etablie } };
+  return {
+    autreId: verdict.autreId,
+    ouverte: { roomId: salon.roomId, autreId: verdict.autreId, etablie },
+  };
 }
 
 /** La bulle gardée pour chaque personne (règle `meilleure`), sans compter la bulle `sauf`. */
-function bullesGardees(
-  c: MatrixClient,
-  moiId: string,
-  sauf?: string,
-): Map<string, BulleOuverte> {
+function bullesGardees(c: MatrixClient, moiId: string, sauf?: string): Map<string, BulleOuverte> {
   const gardees = new Map<string, BulleOuverte>();
   for (const salon of c.getRooms()) {
     if (salon.roomId === sauf) continue;
@@ -850,17 +856,140 @@ async function appareilsDe(c: MatrixClient, userId: string): Promise<string[]> {
 }
 
 /**
- * Anti homme du milieu : au premier échange, retient les appareils de l'autre ; ensuite, refuse
- * d'envoyer si l'autre a un appareil inconnu.
+ * Anti homme du milieu : au premier échange, retient les appareils de l'autre ; ensuite, signale
+ * « nouveau » si l'autre a un appareil inconnu (l'envoi sera alors refusé).
  */
-async function verifierAppareils(c: MatrixClient, roomId: string, autreId: string): Promise<void> {
+async function etatAppareils(
+  c: MatrixClient,
+  roomId: string,
+  autreId: string,
+): Promise<'connus' | 'nouveau'> {
   const actuels = await appareilsDe(c, autreId);
   const connus = lireAppareils()[roomId];
   if (connus === undefined) {
     if (actuels.length > 0) retenirAppareils(roomId, actuels);
-    return;
+    return 'connus';
   }
-  if (actuels.some((id) => !connus.includes(id))) throw new ErreurEnvoiBulle('nouvel-appareil');
+  return actuels.some((id) => !connus.includes(id)) ? 'nouveau' : 'connus';
+}
+
+/*
+ * Vérifications lourdes (chiffrement, 2 membres, appareils de l'autre) faites UNE fois à l'ouverture
+ * de la bulle, puis refaites seulement quand l'état, les membres ou les appareils changent.
+ * Le résultat en mémoire n'est utilisé QUE pendant qu'une surveillance est active (sinon, personne
+ * ne l'invaliderait) : sans surveillance, chaque envoi refait toutes les vérifications.
+ */
+type Preparation = { autreId: string; appareils: 'connus' | 'nouveau' };
+const preparees = new Map<string, Preparation>();
+const enPreparation = new Map<string, Promise<Preparation>>();
+const surveillances = new Map<string, number>();
+/** Augmente à chaque invalidation : une vérification commencée avant un changement est refaite. */
+const versions = new Map<string, number>();
+const ESSAIS_PREPARATION = 3;
+
+function clePreparation(c: MatrixClient, roomId: string): string {
+  return `${c.getUserId() ?? ''}|${roomId}`;
+}
+
+/** Contrôle sans réseau, juste avant l'envoi : bulle rejointe, état SIA, megolm annoncé, toujours à 2. */
+function etatSainEnMemoire(salon: Room, moiId: string): Verdict {
+  if (salon.getMyMembership() !== KnownMembership.Join || !lireEtat(salon)) {
+    throw new Error('Bulle fermée.');
+  }
+  const algo = salon.currentState.getStateEvents('m.room.encryption', '')?.getContent().algorithm;
+  if (!salon.hasEncryptionStateEvent() || algo !== ALGORITHME_BULLE) {
+    throw new Error('Bulle non chiffrée : envoi refusé.');
+  }
+  return examinerBulle(salon, moiId);
+}
+
+/** Refuse (et quitte si suspecte) une bulle qui n'est pas saine. */
+async function exigerSaine(c: MatrixClient, roomId: string, verdict: Verdict): Promise<string> {
+  if (verdict.statut === 'suspecte') {
+    await c.leave(roomId).catch(() => undefined);
+    throw new Error('Bulle invalide : quittée.');
+  }
+  if (verdict.statut !== 'saine') throw new Error('Bulle fermée.');
+  return verdict.autreId;
+}
+
+async function preparerUneFois(c: MatrixClient, roomId: string): Promise<Preparation> {
+  const salon = salonValide(c, roomId);
+  const moiId = moi(c);
+  etatSainEnMemoire(salon, moiId);
+  if (!(await estChiffree(c, roomId))) throw new Error('Bulle non chiffrée : envoi refusé.');
+  await chargerMembres(salon);
+  const autreId = await exigerSaine(c, roomId, examinerBulle(salon, moiId));
+  return { autreId, appareils: await etatAppareils(c, roomId, autreId) };
+}
+
+/** Lance (ou rejoint) la préparation de la bulle ; le résultat n'est gardé que si la bulle est surveillée. */
+function preparer(c: MatrixClient, roomId: string): Promise<Preparation> {
+  const cle = clePreparation(c, roomId);
+  const deja = enPreparation.get(cle);
+  if (deja) return deja;
+  const promesse = preparerUneFois(c, roomId)
+    .then((p) => {
+      if (enPreparation.get(cle) === promesse && surveillances.has(cle)) preparees.set(cle, p);
+      return p;
+    })
+    .finally(() => {
+      if (enPreparation.get(cle) === promesse) enPreparation.delete(cle);
+    });
+  enPreparation.set(cle, promesse);
+  return promesse;
+}
+
+function oublierPreparation(cle: string): void {
+  preparees.delete(cle);
+  enPreparation.delete(cle);
+  versions.set(cle, (versions.get(cle) ?? 0) + 1);
+}
+
+/**
+ * Surveille la bulle ouverte à l'écran : prépare les vérifications tout de suite, puis les refait à
+ * chaque changement d'état, de membres ou d'appareils. Rend la fonction qui arrête la surveillance.
+ */
+export function surveillerBulle(c: MatrixClient, roomId: string): () => void {
+  if (!estIdSalon(roomId)) return () => undefined;
+  const cle = clePreparation(c, roomId);
+  surveillances.set(cle, (surveillances.get(cle) ?? 0) + 1);
+  const rafraichir = (): void => {
+    oublierPreparation(cle);
+    void preparer(c, roomId).catch(() => undefined);
+  };
+  const surEtat = (ev: MatrixEvent): void => {
+    if (ev.getRoomId() === roomId) rafraichir();
+  };
+  const surMembre = (_ev: MatrixEvent, etat: RoomState): void => {
+    if (etat.roomId === roomId) rafraichir();
+  };
+  const surSalon = (salon: Room): void => {
+    if (salon.roomId === roomId) rafraichir();
+  };
+  const surAppareils = (comptes: string[]): void => {
+    const autreId = preparees.get(cle)?.autreId;
+    if (autreId === undefined || (Array.isArray(comptes) && comptes.includes(autreId)))
+      rafraichir();
+  };
+  c.on(RoomStateEvent.Events, surEtat);
+  c.on(RoomStateEvent.Members, surMembre);
+  c.on(RoomEvent.MyMembership, surSalon);
+  c.on(CryptoEvent.DevicesUpdated, surAppareils);
+  rafraichir();
+  return () => {
+    c.off(RoomStateEvent.Events, surEtat);
+    c.off(RoomStateEvent.Members, surMembre);
+    c.off(RoomEvent.MyMembership, surSalon);
+    c.off(CryptoEvent.DevicesUpdated, surAppareils);
+    const reste = (surveillances.get(cle) ?? 1) - 1;
+    if (reste > 0) {
+      surveillances.set(cle, reste);
+      return;
+    }
+    surveillances.delete(cle);
+    oublierPreparation(cle);
+  };
 }
 
 /** L'utilisateur accepte les appareils actuels de l'autre (après une erreur « nouvel-appareil »). */
@@ -870,11 +999,70 @@ export async function accepterNouvelAppareil(c: MatrixClient, roomId: string): P
   const verdict = examinerBulle(salon, moi(c));
   if (verdict.statut !== 'saine') throw new Error('Bulle fermée ou invalide.');
   retenirAppareils(roomId, await appareilsDe(c, verdict.autreId));
+  const cle = clePreparation(c, roomId);
+  oublierPreparation(cle);
+  if (surveillances.has(cle)) {
+    preparees.set(cle, { autreId: verdict.autreId, appareils: 'connus' });
+  }
+}
+
+/** Préparation gardée en mémoire (seulement si la bulle est surveillée), sinon undefined. */
+function preparationConnue(c: MatrixClient, roomId: string): Preparation | undefined {
+  const cle = clePreparation(c, roomId);
+  return surveillances.has(cle) ? preparees.get(cle) : undefined;
+}
+
+/**
+ * Toutes les vérifications maintenant. Si un changement (état, membres, appareils) arrive pendant
+ * l'attente, le résultat est jeté et les vérifications sont refaites.
+ */
+async function preparationFraiche(c: MatrixClient, roomId: string): Promise<Preparation> {
+  const cle = clePreparation(c, roomId);
+  if (!surveillances.has(cle)) oublierPreparation(cle);
+  for (let essai = 0; essai < ESSAIS_PREPARATION; essai += 1) {
+    const version = versions.get(cle) ?? 0;
+    const p = await preparer(c, roomId);
+    if ((versions.get(cle) ?? 0) === version) return p;
+    const connue = preparationConnue(c, roomId);
+    if (connue) return connue;
+  }
+  throw new Error('Bulle en cours de vérification.');
+}
+
+/** Contrôle final, sans réseau, à partir de l'état en mémoire. */
+function controleAvantEnvoi(c: MatrixClient, roomId: string, p: Preparation): void {
+  const salon = salonValide(c, roomId);
+  const verdict = etatSainEnMemoire(salon, moi(c));
+  if (verdict.statut === 'suspecte') {
+    oublierPreparation(clePreparation(c, roomId));
+    void c.leave(roomId).catch(() => undefined);
+    throw new Error('Bulle invalide : quittée.');
+  }
+  if (verdict.statut !== 'saine' || verdict.autreId !== p.autreId) throw new Error('Bulle fermée.');
+  if (p.appareils === 'nouveau') throw new ErreurEnvoiBulle('nouvel-appareil');
+}
+
+async function envoyerVerifie(
+  c: MatrixClient,
+  roomId: string,
+  envoi: () => Promise<{ event_id: string }>,
+): Promise<string> {
+  let reponse: { event_id: string };
+  try {
+    reponse = await envoi();
+  } catch {
+    // L'écho local reste dans le fil (statut « pas envoyé ») : l'écran propose de réessayer.
+    throw new ErreurEnvoiBulle('pas-envoye');
+  }
+  marquerAffiche(c, roomId, reponse.event_id);
+  return reponse.event_id;
 }
 
 /**
  * Envoie un message texte dans une bulle CHIFFRÉE et saine (refus sinon). Il s'effacera 1 min plus tard.
+ * Le message apparaît tout de suite dans le fil (écho local du SDK, statut « envoi… »).
  * Rejette avec ErreurEnvoiBulle('nouvel-appareil') si l'autre a un appareil inconnu : rien n'est envoyé.
+ * Rejette avec ErreurEnvoiBulle('pas-envoye') si le serveur ne l'a pas reçu (réessayable).
  */
 export async function envoyerMessage(
   c: MatrixClient,
@@ -883,23 +1071,38 @@ export async function envoyerMessage(
 ): Promise<string> {
   const corps = typeof texte === 'string' ? texte.trim() : '';
   if (corps === '' || corps.length > LONGUEUR_MAX_MESSAGE) throw new Error('Message invalide.');
+  salonValide(c, roomId);
+  // Bulle surveillée et déjà vérifiée : aucun aller-retour avant sendMessage.
+  const preparation = preparationConnue(c, roomId) ?? (await preparationFraiche(c, roomId));
+  controleAvantEnvoi(c, roomId, preparation);
+  return envoyerVerifie(c, roomId, () =>
+    c.sendMessage(roomId, { msgtype: MsgType.Text, body: corps }),
+  );
+}
+
+/** Mon message resté « pas envoyé » dans cette bulle (écho local), ou null. */
+function monMessageNonEnvoye(c: MatrixClient, salon: Room, eventId: string): MatrixEvent | null {
+  const ev = salon
+    .getLiveTimeline()
+    .getEvents()
+    .find((e) => e.getId() === eventId);
+  if (!ev || ev.status !== EventStatus.NOT_SENT || ev.getSender() !== c.getUserId()) return null;
+  return ev.getType() === 'm.room.message' && ev.getRoomId() === salon.roomId ? ev : null;
+}
+
+/** « Toucher pour réessayer » : renvoie mon message non envoyé, avec les mêmes contrôles qu'un envoi. */
+export async function reessayerMessage(
+  c: MatrixClient,
+  roomId: string,
+  eventId: string,
+): Promise<string> {
   const salon = salonValide(c, roomId);
-  const moiId = moi(c);
-  if (salon.getMyMembership() !== KnownMembership.Join || !lireEtat(salon)) {
-    throw new Error('Bulle fermée.');
-  }
-  if (!(await estChiffree(c, roomId))) throw new Error('Bulle non chiffrée : envoi refusé.');
-  await chargerMembres(salon);
-  const verdict = examinerBulle(salon, moiId);
-  if (verdict.statut === 'suspecte') {
-    await c.leave(roomId).catch(() => undefined);
-    throw new Error('Bulle invalide : quittée.');
-  }
-  if (verdict.statut !== 'saine') throw new Error('Bulle fermée.');
-  await verifierAppareils(c, roomId, verdict.autreId);
-  const { event_id } = await c.sendMessage(roomId, { msgtype: MsgType.Text, body: corps });
-  marquerAffiche(c, roomId, event_id);
-  return event_id;
+  const ev = typeof eventId === 'string' ? monMessageNonEnvoye(c, salon, eventId) : null;
+  if (!ev) throw new Error('Message introuvable.');
+  // Bulle surveillée et déjà vérifiée : aucun aller-retour avant sendMessage.
+  const preparation = preparationConnue(c, roomId) ?? (await preparationFraiche(c, roomId));
+  controleAvantEnvoi(c, roomId, preparation);
+  return envoyerVerifie(c, roomId, () => c.resendEvent(ev, salon));
 }
 
 /** « En train d'écrire… » (m.typing standard). */

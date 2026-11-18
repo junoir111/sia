@@ -227,6 +227,30 @@
   }
 }
 
+/* État d'envoi de mon message : discret pendant l'envoi, visible (et touchable) en cas d'échec. */
+.message__envoi {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--sia-aide);
+  color: var(--sia-texte-doux);
+  text-align: right;
+}
+
+.message__echec {
+  display: block;
+  width: 100%;
+  min-height: var(--sia-toucher);
+  margin-top: 4px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--sia-aide);
+  color: var(--sia-alerte);
+  text-align: right;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
 /* --- Zone d'écriture --- */
 .bulle__saisie {
   display: flex;

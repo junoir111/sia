@@ -1,5 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { CHEMINS } from '../../chemins';
+import { lireSession } from '../../matrix/session';
 import { BoutonPrincipal } from '../../ui/BoutonPrincipal';
 import { BoutonSecondaire } from '../../ui/BoutonSecondaire';
 import './accueil.css';
@@ -7,6 +8,8 @@ import './accueil.css';
 /** E1 Accueil : le nom SIA, une phrase, deux boutons en bas. */
 export function Accueil() {
   const navigate = useNavigate();
+  // Déjà connecté (appli rouverte) : droit au Mur.
+  if (lireSession()) return <Navigate to={CHEMINS.mur} replace />;
   return (
     <main className="ecran accueil">
       <div className="accueil__centre">
