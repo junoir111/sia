@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useSyncExternalStore } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { CHEMINS } from '../../chemins';
+import { statutNotifications, surStatutNotifications } from '../../matrix/notifications';
 import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeBulles, IconeChevron } from '../../ui/icones';
@@ -18,6 +19,7 @@ type Proprietes = {
 export function MonCompte({ pseudo, moi, nouveautes, onFermer }: Proprietes) {
   const idTitre = useId();
   const fermer = useRef<HTMLButtonElement>(null);
+  const notifications = useSyncExternalStore(surStatutNotifications, statutNotifications);
 
   useEffect(() => {
     fermer.current?.focus();
@@ -72,6 +74,16 @@ export function MonCompte({ pseudo, moi, nouveautes, onFermer }: Proprietes) {
             </Link>
           </li>
         </ul>
+        {notifications === 'sans-distributeur' && (
+          <p className="compte__info" role="status">
+            Installe l'appli ntfy pour être prévenu.
+          </p>
+        )}
+        {notifications === 'autorisation-refusee' && (
+          <p className="compte__info" role="status">
+            Autorise les notifications de SIA dans les réglages du téléphone pour être prévenu.
+          </p>
+        )}
         <BoutonDeconnexion />
         <button
           ref={fermer}

@@ -5,6 +5,7 @@ import { CHEMINS } from '../chemins';
 import type { Session } from '../matrix/auth';
 import { arreterClient, demarrerClient } from '../matrix/client';
 import { nettoyerMesAnnonces, rejoindreMur } from '../matrix/mur';
+import { lancerNotifications } from '../matrix/notifications';
 import { effacerSession, lireSession } from '../matrix/session';
 
 /*
@@ -37,6 +38,8 @@ async function demarrer(session: Session): Promise<MatrixClient> {
   await rejoindreMur(client);
   // Ménage de mes annonces expirées : ne bloque pas l'ouverture, retenté à la prochaine.
   nettoyerMesAnnonces(client).catch(() => undefined);
+  // Notifications (Android seulement) : ne bloque pas l'ouverture, ne rejette jamais.
+  void lancerNotifications(client);
   return client;
 }
 

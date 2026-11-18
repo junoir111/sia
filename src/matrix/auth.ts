@@ -3,6 +3,7 @@ import { ADRESSE_SERVEUR } from '../config';
 import { arreterClient, clientActif, PREFIXE_BASE_CRYPTO } from './client';
 import { toutEffacerMaintenant } from './ephemere';
 import { oublierMur, retirerMesPublications } from './mur';
+import { arreterNotifications } from './notifications';
 import { effacerSession, estSession } from './session';
 
 /*
@@ -261,6 +262,7 @@ const CLES_APPAREIL = [
   'sia.vues',
   'sia.annuaire',
   'sia.appareils',
+  'sia.pushkey',
 ];
 /** Temps laissé aux effacements en attente avant d'annuler le jeton. */
 const DELAI_EFFACEMENTS_MS = 10_000;
@@ -332,6 +334,11 @@ async function retirerDuMur(): Promise<void> {
   if (c) await avecDelai(retirerMesPublications(c), DELAI_RETRAIT_MUR_MS);
 }
 
+/** Retire le pusher de notifications (il faut encore le jeton), 5 s au plus. */
+async function retirerNotifications(): Promise<void> {
+  await arreterNotifications(clientActif());
+}
+
 /** Efface tout de suite les messages en file (il faut encore le jeton), 10 s au plus. */
 async function effacerMessagesEnAttente(): Promise<void> {
   const c = clientActif();
@@ -345,6 +352,7 @@ async function effacerMessagesEnAttente(): Promise<void> {
 export async function deconnecter(session: Session): Promise<void> {
   await retirerDuMur();
   await effacerMessagesEnAttente();
+  await retirerNotifications();
   await annulerJeton(session);
   essayer(() => arreterClient());
   essayer(() => oublierMur());

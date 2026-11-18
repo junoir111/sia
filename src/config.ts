@@ -12,3 +12,9 @@ export const DUREE_MAX_ANNONCE_MS = 24 * HEURE_MS;
 
 /** Salon du Mur (alias, l'identifiant interne est retrouvé par le serveur). */
 export const ALIAS_MUR = '#sia-mur:sia.tail94dc60.ts.net';
+
+/** Identifiant de l'appli côté notifications (celui d'Android). */
+export const APP_ID_PUSH = 'io.github.junoir111.sia';
+
+/** Passerelle Matrix de ntfy (notifications sans Firebase). Même nom de serveur, port 8443. */
+export const URL_PASSERELLE_PUSH = 'https://sia.tail94dc60.ts.net:8443/_matrix/push/v1/notify';
