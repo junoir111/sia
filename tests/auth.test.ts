@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { creerCompte } from '../src/matrix/auth';
+import { connecter, creerCompte } from '../src/matrix/auth';
 
 const ID = 'puma-35';
 const MDP = 'un-mot-de-passe-long';
@@ -212,5 +212,73 @@ describe('creerCompte', () => {
     await creerCompte(ID, MDP, CODE);
     for (const espion of espions) expect(espion).not.toHaveBeenCalled();
     vi.restoreAllMocks();
+  });
+});
+
+describe('limite de débit (429)', () => {
+  const LIMITE = { errcode: 'M_LIMIT_EXCEEDED', error: 'trop vite', retry_after_ms: 1500 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('connexion : 429 puis 200 réussit après l’attente demandée', async () => {
+    simuler(reponse(429, LIMITE), reponse(200, SUCCES));
+    const attente = connecter(ID, MDP);
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(faux).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await attente).toMatchObject({ ok: true });
+    expect(faux).toHaveBeenCalledTimes(2);
+  });
+
+  it('connexion : 429 quatre fois de suite → trop-de-demandes (4 appels)', async () => {
+    faux.mockImplementation(() => Promise.resolve(reponse(429, LIMITE)));
+    const attente = connecter(ID, MDP);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await attente).toEqual({ ok: false, erreur: 'trop-de-demandes' });
+    expect(faux).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    [10, 500],
+    [60_000, 5_000],
+    [undefined, 2_000],
+    ['abc', 2_000],
+  ])('attente bornée : retry_after_ms=%s → %s ms', async (demande, attendu) => {
+    simuler(
+      reponse(429, { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: demande }),
+      reponse(200, SUCCES),
+    );
+    const attente = connecter(ID, MDP);
+    await vi.advanceTimersByTimeAsync(attendu - 1);
+    expect(faux).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(faux).toHaveBeenCalledTimes(2);
+    await attente;
+  });
+
+  it('connexion : 403 reste identifiants, sans réessai', async () => {
+    simuler(reponse(403, { errcode: 'M_FORBIDDEN' }));
+    expect(await connecter(ID, MDP)).toEqual({ ok: false, erreur: 'identifiants' });
+    expect(faux).toHaveBeenCalledTimes(1);
+  });
+
+  it('inscription : 429 puis succès', async () => {
+    simuler(reponse(429, LIMITE), reponse(401, DEFI), reponse(200, SUCCES));
+    const attente = creerCompte(ID, MDP, CODE);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(await attente).toMatchObject({ ok: true });
+  });
+
+  it('inscription : 429 quatre fois → trop-de-demandes', async () => {
+    faux.mockImplementation(() => Promise.resolve(reponse(429, LIMITE)));
+    const attente = creerCompte(ID, MDP, CODE);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await attente).toEqual({ ok: false, erreur: 'trop-de-demandes' });
+    expect(faux).toHaveBeenCalledTimes(4);
   });
 });

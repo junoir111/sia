@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALIAS_MUR } from '../src/config';
 import {
   MAX_INVITATIONS_DIRECTES,
+  bulleAvec,
   accepterOffre,
   demanderA,
   listerBulles,
@@ -100,8 +101,9 @@ afterEach(() => vi.useRealTimers());
 describe('demanderA', () => {
   it('crée une bulle chiffrée à 2 et invite ce seul prestataire, sans rien de la demande', async () => {
     const c = clientDemande();
-    const roomId = await demanderA(comme(c), AUTRE, PUBLIC_CLIENT);
+    const { roomId, reutilisee } = await demanderA(comme(c), AUTRE, PUBLIC_CLIENT);
     expect(roomId).toBe(BULLE);
+    expect(reutilisee).toBe(false);
     const options = (c.createRoom.mock.calls[0] as unknown[] | undefined)?.[0] as Record<
       string,
       unknown
@@ -192,10 +194,13 @@ describe('demanderA', () => {
     expect(c.leave).toHaveBeenCalledWith(BULLE);
   });
 
-  it('refuse une 2e demande vers la même personne tant que la 1re bulle est ouverte', async () => {
+  it('une 2e demande vers la même personne réutilise la 1re bulle encore ouverte', async () => {
     const c = clientDemande();
     await demanderA(comme(c), AUTRE, PUBLIC_CLIENT);
-    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).rejects.toThrow(/déjà/);
+    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toEqual({
+      roomId: BULLE,
+      reutilisee: true,
+    });
     expect(c.createRoom).toHaveBeenCalledTimes(1);
     expect(c.invite).toHaveBeenCalledTimes(1);
   });
@@ -213,7 +218,10 @@ describe('demanderA', () => {
     const c = clientDemande();
     await demanderA(comme(c), AUTRE, PUBLIC_CLIENT);
     c.salons.length = 1; // bulle fermée : plus dans la liste
-    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toBe(BULLE);
+    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toEqual({
+      roomId: BULLE,
+      reutilisee: false,
+    });
     expect(c.createRoom).toHaveBeenCalledTimes(2);
   });
 });
@@ -223,20 +231,32 @@ const RAISON = 'palmier-48 (Akanda) vous demande';
 /** Invitation reçue par moi (le prestataire), de AUTRE (le client). Rejoindre la rend « join ». */
 function invitationDirecte(
   raison: string,
-  o: { etat?: object; createur?: string; tiers?: boolean; id?: string; ts?: number; parti?: boolean } = {},
+  o: {
+    etat?: object;
+    createur?: string;
+    tiers?: boolean;
+    id?: string;
+    ts?: number;
+    parti?: boolean;
+    de?: string;
+  } = {},
 ) {
+  const de = o.de ?? AUTRE;
   const evMembre: MatrixEvent = evenement({
     type: 'm.room.member',
     stateKey: MOI,
-    sender: AUTRE,
+    sender: de,
     content: { membership: 'invite', reason: raison },
   });
   const f: FauxSalon = {
     roomId: o.id ?? BULLE,
     appartenance: 'invite',
     ts: o.ts ?? 0,
-    createur: o.createur ?? AUTRE,
-    membres: { [MOI]: { membership: 'invite', event: evMembre }, [AUTRE]: { membership: o.parti ? 'leave' : 'join' } },
+    createur: o.createur ?? de,
+    membres: {
+      [MOI]: { membership: 'invite', event: evMembre },
+      [de]: { membership: o.parti ? 'leave' : 'join' },
+    },
     etat: {},
     evenements: [],
   };
@@ -366,7 +386,9 @@ describe('invitation « X vous demande » côté prestataire', () => {
 
   describe("plafond d'invitations directes", () => {
     const ids = Array.from({ length: 13 }, (_, i) => `!inv${i}:sia.tail94dc60.ts.net`);
-    const salons = () => ids.map((id, i) => invitationDirecte(RAISON, { id, ts: i + 1 }).salon);
+    // Des personnes différentes (une seule bulle par personne).
+    const salons = () =>
+      ids.map((id, i) => invitationDirecte(RAISON, { id, ts: i + 1, de: `@c${i}:sia` }).salon);
 
     it(`n'en montre que ${MAX_INVITATIONS_DIRECTES} (les plus récentes) et quitte les autres sans bruit`, () => {
       const c = fauxClient(salons());
@@ -391,5 +413,119 @@ describe('invitation « X vous demande » côté prestataire', () => {
       const c = fauxClient([...valables, poubelle.salon]);
       expect(listerBulles(comme(c))).toHaveLength(10);
     });
+  });
+});
+
+/** Bulle rejointe par moi, avec AUTRE (« join » ou « invite »), créée par `createur`. */
+function bulleOuverte(id: string, autre: 'join' | 'invite', createur: string, ts = 0) {
+  const invite = evenement({ type: 'm.room.member', stateKey: AUTRE, sender: createur, content: {} });
+  const participants =
+    createur === MOI
+      ? { [MOI]: PUBLIC_CLIENT, [AUTRE]: { pseudo: 'puma', zone: 'Nzeng' } }
+      : { [AUTRE]: PUBLIC_CLIENT, [MOI]: { pseudo: 'puma', zone: 'Nzeng' } };
+  return salon({
+    roomId: id,
+    appartenance: 'join',
+    ts,
+    createur,
+    membres: { [MOI]: { membership: 'join' }, [AUTRE]: { membership: autre, event: invite } },
+    etat: etatsBulle(participants, createur),
+    evenements: [],
+  });
+}
+
+const vues = (c: ReturnType<typeof fauxClient>) => listerBulles(comme(c)).map((b) => b.roomId);
+const quittees = (c: ReturnType<typeof fauxClient>) =>
+  c.leave.mock.calls.map((a) => (a as unknown[])[0]);
+
+describe('une seule bulle par paire de personnes', () => {
+  it('bulleAvec trouve la bulle ouverte avec cette personne, rien avec une autre', () => {
+    const c = fauxClient([murAvecPresta(), bulleOuverte(BULLE, 'join', AUTRE)]);
+    expect(bulleAvec(comme(c), AUTRE)).toBe(BULLE);
+    expect(bulleAvec(comme(c), INTRUS)).toBeNull();
+    expect(bulleAvec(comme(c), MOI)).toBeNull();
+    expect(bulleAvec(comme(c), 42 as unknown as string)).toBeNull();
+  });
+
+  it("bulleAvec ignore une bulle dont l'autre est parti", () => {
+    const c = fauxClient([murAvecPresta(), bulleCreee({ [AUTRE]: { membership: 'leave' } })]);
+    expect(bulleAvec(comme(c), AUTRE)).toBeNull();
+  });
+
+  it('demanderA réutilise la bulle déjà ouverte (ouverte par « Oui » de l’autre) sans rien créer', async () => {
+    const c = fauxClient([murAvecPresta(), bulleOuverte(BULLE, 'join', AUTRE)]);
+    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toEqual({
+      roomId: BULLE,
+      reutilisee: true,
+    });
+    expect(c.createRoom).not.toHaveBeenCalled();
+    expect(c.invite).not.toHaveBeenCalled();
+  });
+
+  it('demanderA accepte d’abord l’invitation de la même personne, puis la rend', async () => {
+    const c = clientPresta(invitationDirecte(RAISON));
+    await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toEqual({
+      roomId: BULLE,
+      reutilisee: true,
+    });
+    expect(c.joinRoom).toHaveBeenCalledWith(BULLE);
+    expect(c.createRoom).not.toHaveBeenCalled();
+  });
+
+  it('invitation en double : la bulle où les deux sont entrés est gardée, l’invitation est quittée', () => {
+    const doublon = invitationDirecte(RAISON, { id: '!a1:sia.tail94dc60.ts.net', ts: 9 });
+    const c = fauxClient([bulleOuverte('!b9:sia.tail94dc60.ts.net', 'join', AUTRE), doublon.salon]);
+    expect(vues(c)).toEqual(['!b9:sia.tail94dc60.ts.net']);
+    expect(quittees(c)).toEqual(['!a1:sia.tail94dc60.ts.net']);
+    expect(bulleAvec(comme(c), AUTRE)).toBe('!b9:sia.tail94dc60.ts.net');
+  });
+
+  it('deux bulles où les deux sont entrés (bug constaté) : la plus petite est gardée', () => {
+    const c = fauxClient([
+      bulleOuverte('!c2:sia.tail94dc60.ts.net', 'join', MOI, 5),
+      bulleOuverte('!c1:sia.tail94dc60.ts.net', 'join', AUTRE, 1),
+    ]);
+    expect(vues(c)).toEqual(['!c1:sia.tail94dc60.ts.net']);
+    expect(quittees(c)).toEqual(['!c2:sia.tail94dc60.ts.net']);
+  });
+
+  it('course croisée : chacun garde la bulle au plus petit identifiant et quitte l’autre', () => {
+    // Côté A : ma bulle !b2 (l'autre invité) + l'invitation !b1 de l'autre → garde !b1.
+    const a = fauxClient([
+      bulleOuverte('!b2:sia.tail94dc60.ts.net', 'invite', MOI),
+      invitationDirecte(RAISON, { id: '!b1:sia.tail94dc60.ts.net' }).salon,
+    ]);
+    expect(vues(a)).toEqual(['!b1:sia.tail94dc60.ts.net']);
+    expect(quittees(a)).toEqual(['!b2:sia.tail94dc60.ts.net']);
+    // Côté B (même règle) : sa bulle !d1 + l'invitation !d2 → garde aussi la plus petite, !d1.
+    const b = fauxClient([
+      bulleOuverte('!d1:sia.tail94dc60.ts.net', 'invite', MOI),
+      invitationDirecte(RAISON, { id: '!d2:sia.tail94dc60.ts.net' }).salon,
+    ]);
+    expect(vues(b)).toEqual(['!d1:sia.tail94dc60.ts.net']);
+    expect(quittees(b)).toEqual(['!d2:sia.tail94dc60.ts.net']);
+  });
+
+  it('course croisée pendant « Demander » : ma bulle refusée, on rejoint celle de l’autre', async () => {
+    const sienne = invitationDirecte(RAISON, { id: '!a1:sia.tail94dc60.ts.net' });
+    const c = fauxClient([murAvecPresta()]);
+    c.createRoom.mockImplementation(async () => {
+      // Pendant la création, l'autre m'invite dans sa bulle (plus petite) et quitte la mienne.
+      c.salons.push(bulleCreee({ [AUTRE]: { membership: 'leave' } }), sienne.salon);
+      return { room_id: BULLE };
+    });
+    c.joinRoom.mockImplementation(async (id: string) => {
+      if (id !== '!a1:sia.tail94dc60.ts.net') return c.salons[0] as never; // le Mur
+      sienne.apres();
+      return sienne.salon as never;
+    });
+    const resultat = demanderA(comme(c), AUTRE, PUBLIC_CLIENT);
+    await vi.advanceTimersByTimeAsync(11_000);
+    await expect(resultat).resolves.toEqual({
+      roomId: '!a1:sia.tail94dc60.ts.net',
+      reutilisee: true,
+    });
+    expect(c.leave).toHaveBeenCalledWith(BULLE);
+    expect(c.joinRoom).toHaveBeenCalledWith('!a1:sia.tail94dc60.ts.net');
   });
 });

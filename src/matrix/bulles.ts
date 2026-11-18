@@ -132,8 +132,92 @@ function memeDemande(a: DemandeClient, b: DemandeClient): boolean {
   );
 }
 
+/** Résultat de « Demander » / « Oui » : la bulle, et si elle existait déjà (on y va directement). */
+export type MiseEnRelation = { roomId: string; reutilisee: boolean };
+
+/** Une bulle ouverte avec quelqu'un. `etablie` : les deux y sont entrés (sinon l'un n'est qu'invité). */
+type BulleOuverte = { roomId: string; autreId: string; etablie: boolean };
+
 /**
- * Prestataire : « Je dis oui » à une demande. Crée la bulle chiffrée et invite le client.
+ * Règle « une seule bulle par paire » (même verdict des deux côtés) : la bulle où les deux sont
+ * entrés gagne ; à égalité, celle dont l'identifiant (roomId) est le plus petit.
+ */
+function meilleure(a: BulleOuverte, b: BulleOuverte): BulleOuverte {
+  if (a.etablie !== b.etablie) return a.etablie ? a : b;
+  return a.roomId < b.roomId ? a : b;
+}
+
+/** L'autre personne d'une bulle (invitation valable ou bulle rejointe), avec l'état ouvert / parti. */
+function autreDe(
+  c: MatrixClient,
+  salon: Room,
+  moiId: string,
+): { autreId: string; ouverte: BulleOuverte | null } | null {
+  const appartenance = salon.getMyMembership();
+  if (appartenance === KnownMembership.Invite) {
+    const autreId =
+      lireDemandeDirecte(salon, moiId)?.autreId ?? lireOffre(c, salon, moiId)?.autreId;
+    if (!autreId) return null;
+    const ouverte = invitantParti(salon, autreId)
+      ? null
+      : { roomId: salon.roomId, autreId, etablie: false };
+    return { autreId, ouverte };
+  }
+  if (appartenance !== KnownMembership.Join || !salon.hasEncryptionStateEvent()) return null;
+  const verdict = examinerBulle(salon, moiId);
+  if (verdict.statut !== 'saine' && verdict.statut !== 'autre-partie') return null;
+  if (verdict.statut === 'autre-partie') return { autreId: verdict.autreId, ouverte: null };
+  const etablie = salon.getMember(verdict.autreId)?.membership === KnownMembership.Join;
+  return { autreId: verdict.autreId, ouverte: { roomId: salon.roomId, autreId: verdict.autreId, etablie } };
+}
+
+/** La bulle gardée pour chaque personne (règle `meilleure`), sans compter la bulle `sauf`. */
+function bullesGardees(
+  c: MatrixClient,
+  moiId: string,
+  sauf?: string,
+): Map<string, BulleOuverte> {
+  const gardees = new Map<string, BulleOuverte>();
+  for (const salon of c.getRooms()) {
+    if (salon.roomId === sauf) continue;
+    const ouverte = autreDe(c, salon, moiId)?.ouverte;
+    if (!ouverte) continue;
+    const deja = gardees.get(ouverte.autreId);
+    gardees.set(ouverte.autreId, deja ? meilleure(deja, ouverte) : ouverte);
+  }
+  return gardees;
+}
+
+/**
+ * La bulle SIA saine ouverte avec `autreUserId` (moi et lui « join » ou « invite », personne de parti),
+ * ou null. S'il y en a plusieurs : celle gardée par la règle « une seule bulle par paire ».
+ */
+export function bulleAvec(c: MatrixClient, autreUserId: string): string | null {
+  const moiId = c.getUserId();
+  if (!moiId || typeof autreUserId !== 'string' || autreUserId === moiId) return null;
+  return bullesGardees(c, moiId).get(autreUserId)?.roomId ?? null;
+}
+
+/**
+ * Bulle déjà ouverte avec cette personne (hors `sauf`, bulle que je viens de quitter) :
+ * l'accepte si je n'y suis qu'invité, et la rend.
+ */
+async function reutiliser(
+  c: MatrixClient,
+  autreId: string,
+  sauf?: string,
+): Promise<MiseEnRelation | null> {
+  const roomId = bullesGardees(c, moi(c), sauf).get(autreId)?.roomId ?? null;
+  if (roomId === null) return null;
+  if (c.getRoom(roomId)?.getMyMembership() === KnownMembership.Invite) {
+    await accepterOffre(c, roomId);
+  }
+  return { roomId, reutilisee: true };
+}
+
+/**
+ * Prestataire : « Je dis oui » à une demande. Crée la bulle chiffrée et invite le client, SAUF si une
+ * bulle est déjà ouverte avec ce client : elle est alors réutilisée (acceptée si besoin).
  * La demande est relue sur le Mur (source sûre de l'expéditeur) et doit être identique à celle affichée.
  */
 export async function direOui(
@@ -141,7 +225,7 @@ export async function direOui(
   demande: DemandeClient,
   eventId: string,
   moiPublic: ParticipantBulle,
-): Promise<string> {
+): Promise<MiseEnRelation> {
   const presta = participantSur(moiPublic);
   const annonce = await trouverDemande(c, eventId);
   if (!annonce || !memeDemande(annonce.demande, demande)) throw new Error('Demande introuvable.');
@@ -149,6 +233,8 @@ export async function direOui(
   const client = annonce.expediteur;
   const moiId = moi(c);
   if (client === moiId) throw new Error('Impossible de répondre à sa propre demande.');
+  const existante = await reutiliser(c, client);
+  if (existante) return existante;
 
   const d = annonce.demande;
   const etat: ContenuEtatBulle = {
@@ -189,7 +275,7 @@ export async function direOui(
     await abandonnerBulle(c, room_id, client);
     throw erreur;
   }
-  return room_id;
+  return { roomId: room_id, reutilisee: false };
 }
 
 /** Échec après la création : annule l'invitation si elle est partie, puis quitte la bulle (chaque étape tentée). */
@@ -268,12 +354,13 @@ async function attendre(condition: () => boolean | Promise<boolean>): Promise<bo
  * prestataire (il doit avoir un statut « disponible » valable sur le Mur). Rien de la demande n'est
  * envoyé : ni budget, ni description (la raison de l'invitation est « <pseudo> (<zone>) vous demande »).
  * La bulle doit être chiffrée et saine (2 personnes) ; sinon elle est quittée et l'envoi échoue.
+ * Si une bulle est déjà ouverte avec ce prestataire, rien n'est créé : elle est réutilisée.
  */
 export async function demanderA(
   c: MatrixClient,
   userIdPrestataire: string,
   moiPublic: ParticipantBulle,
-): Promise<string> {
+): Promise<MiseEnRelation> {
   if (demandesEnCours.has(userIdPrestataire)) throw new Error('Demande déjà envoyée.');
   demandesEnCours.add(userIdPrestataire);
   try {
@@ -283,28 +370,18 @@ export async function demanderA(
   }
 }
 
-/** Il existe déjà une bulle ouverte (créée par moi, saine, sans annonce) avec cette personne. */
-function bulleDirecteOuverteAvec(c: MatrixClient, moiId: string, autreId: string): boolean {
-  return c.getRooms().some((salon) => {
-    if (salon.getMyMembership() !== KnownMembership.Join) return false;
-    const etat = lireEtat(salon);
-    if (etat === null || etat.demande !== null) return false;
-    const verdict = examinerBulle(salon, moiId);
-    return verdict.statut === 'saine' && verdict.autreId === autreId && verdict.createur === moiId;
-  });
-}
-
 async function demanderAUneFois(
   c: MatrixClient,
   userIdPrestataire: string,
   moiPublic: ParticipantBulle,
-): Promise<string> {
+): Promise<MiseEnRelation> {
   const moiId = moi(c);
   const client = participantSur(moiPublic);
-  if (userIdPrestataire === moiId) throw new Error('Impossible de se demander à soi-même.');
-  if (bulleDirecteOuverteAvec(c, moiId, userIdPrestataire)) {
-    throw new Error('Demande déjà envoyée : la bulle est encore ouverte.');
+  if (typeof userIdPrestataire !== 'string' || userIdPrestataire === moiId) {
+    throw new Error('Impossible de se demander à soi-même.');
   }
+  const existante = await reutiliser(c, userIdPrestataire);
+  if (existante) return existante;
   const statut = (await lireStatuts(c)).find((s) => s.userId === userIdPrestataire);
   if (!statut) throw new Error('Prestataire indisponible.');
   const presta = participantSur({ pseudo: statut.pseudo, zone: statut.zone });
@@ -340,9 +417,12 @@ async function demanderAUneFois(
     if (!sure) throw new Error('Bulle non chiffrée ou invalide : demande annulée.');
   } catch (erreur) {
     await abandonnerBulle(c, room_id, userIdPrestataire);
+    // Course croisée : ma bulle a perdu contre celle que l'autre m'a ouverte en même temps → on y va.
+    const gagnante = await reutiliser(c, userIdPrestataire, room_id).catch(() => null);
+    if (gagnante) return gagnante;
     throw erreur;
   }
-  return room_id;
+  return { roomId: room_id, reutilisee: false };
 }
 
 function raisonInvitation(salon: Room, moiId: string): unknown {
@@ -640,14 +720,34 @@ function resumeBulle(c: MatrixClient, salon: Room, moiId: string): ResumeBulle |
   };
 }
 
-/** Bulles et offres reçues, la plus récente d'abord. */
+/**
+ * Vrai si une AUTRE bulle est gardée avec la même personne : celle-ci (invitation en double, bulle
+ * perdante d'une course croisée, ou bulle fermée remplacée) est alors quittée sans bruit.
+ */
+function enDoublon(
+  c: MatrixClient,
+  salon: Room,
+  moiId: string,
+  gardees: ReadonlyMap<string, BulleOuverte>,
+): boolean {
+  const autre = autreDe(c, salon, moiId);
+  const gardee = autre ? gardees.get(autre.autreId) : undefined;
+  return gardee !== undefined && gardee.roomId !== salon.roomId;
+}
+
+/** Bulles et offres reçues, la plus récente d'abord (une seule bulle par personne). */
 export function listerBulles(c: MatrixClient): ResumeBulle[] {
   const moiId = c.getUserId();
   if (!moiId) return [];
   const retenues = invitationsDirectesRetenues(c, moiId);
+  const gardees = bullesGardees(c, moiId);
   return c
     .getRooms()
     .map((salon) => {
+      if (enDoublon(c, salon, moiId, gardees)) {
+        quitterSansBruit(c, salon.roomId);
+        return { salon, r: null };
+      }
       const appartenance = salon.getMyMembership();
       if (appartenance === KnownMembership.Invite)
         return { salon, r: resumeInvitation(c, salon, moiId, retenues) };

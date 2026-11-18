@@ -52,6 +52,10 @@ const REPONSES_SERVEUR: Record<ErreurInscription, Reponse> = {
     message: 'Mot de passe trop simple. Mélange lettres et chiffres.',
   },
   reseau: { bandeau: true, message: 'Pas de connexion. Réessaie dans un instant.' },
+  'trop-de-demandes': {
+    bandeau: true,
+    message: 'Trop d’essais en même temps. Attends quelques secondes et réessaie.',
+  },
   inconnue: { bandeau: true, message: 'Un problème est survenu. Réessaie.' },
 };
 

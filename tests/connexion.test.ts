@@ -83,9 +83,7 @@ describe('connecter', () => {
     expect(await connecter('puma-35', MDP)).toEqual({ ok: false, erreur: 'reseau' });
   });
 
-  it('autre erreur (429, 403 sans M_FORBIDDEN) : inconnue', async () => {
-    faux.mockResolvedValueOnce(reponse(429, { errcode: 'M_LIMIT_EXCEEDED' }));
-    expect(await connecter('puma-35', MDP)).toEqual({ ok: false, erreur: 'inconnue' });
+  it('autre erreur (403 sans M_FORBIDDEN) : inconnue (le 429 est testé dans auth.test.ts)', async () => {
     faux.mockResolvedValueOnce(reponse(403, { errcode: 'M_USER_DEACTIVATED' }));
     expect(await connecter('puma-35', MDP)).toEqual({ ok: false, erreur: 'inconnue' });
   });

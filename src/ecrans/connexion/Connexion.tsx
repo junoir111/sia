@@ -16,6 +16,7 @@ import './connexion.css';
 const MESSAGES = {
   identifiants: 'Identifiant ou mot de passe incorrect.',
   reseau: 'Pas de connexion. Réessaie dans un instant.',
+  'trop-de-demandes': 'Trop d’essais en même temps. Attends quelques secondes et réessaie.',
   inconnue: 'Un problème est survenu. Réessaie.',
   stockage: 'Le téléphone refuse de garder ta connexion. Réessaie.',
 } as const;

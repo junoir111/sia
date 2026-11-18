@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { formaterPrix } from '../../logique/profil';
 import { direOui } from '../../matrix/bulles';
@@ -38,17 +39,22 @@ export function FicheDemande() {
     setEnvoi(true);
     setBandeau(null);
     const { pseudo, service, zone, texte, budget, fin } = demande;
+    let resultat;
     try {
-      await direOui(client, { pseudo, service, zone, texte, budget, fin }, demande.eventId, {
-        pseudo: moi.pseudo,
-        zone: moi.zone,
-      });
+      resultat = await direOui(
+        client,
+        { pseudo, service, zone, texte, budget, fin },
+        demande.eventId,
+        { pseudo: moi.pseudo, zone: moi.zone },
+      );
     } catch (e) {
       setEnvoi(false);
       setBandeau(familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME);
       return;
     }
-    navigate(retour, { state: etatSucces(`Réponse envoyée à ${pseudo}`) });
+    // Bulle déjà ouverte avec ce client : on y va directement.
+    if (resultat.reutilisee) navigate(cheminBulle(resultat.roomId));
+    else navigate(retour, { state: etatSucces(`Réponse envoyée à ${pseudo}`) });
   }
 
   if (reseauKo || !vue.pret || !demande) {

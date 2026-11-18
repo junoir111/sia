@@ -169,8 +169,12 @@ export function Bandeau() {
     setOccupe(true);
     setEchec(null);
     try {
+      let bulleExistante: string | null = null;
       if (el.type === 'demande') {
-        if (oui) await direOui(c, el.demande.demande, el.cle, await moiPublic(c));
+        if (oui) {
+          const r = await direOui(c, el.demande.demande, el.cle, await moiPublic(c));
+          if (r.reutilisee) bulleExistante = r.roomId;
+        }
         vues.current = ajouterVue(dejaVues(), el.cle);
       } else if (oui) {
         await accepterOffre(c, el.cle);
@@ -181,6 +185,8 @@ export function Bandeau() {
       }
       retirer(el.cle);
       if (el.type === 'offre' && oui) navigate(cheminBulle(el.cle));
+      // « Oui » à un client avec qui une bulle est déjà ouverte : on y va.
+      if (bulleExistante !== null) navigate(cheminBulle(bulleExistante));
     } catch (e) {
       if (familleErreur(e) === 'reseau') {
         setEchec({ cle: el.cle, texte: PAS_DE_RESEAU });

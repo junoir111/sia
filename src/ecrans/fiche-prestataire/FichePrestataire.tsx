@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { libelleModalite, prixIndicatif } from '../../logique/mur';
 import { demanderA } from '../../matrix/bulles';
@@ -37,14 +38,17 @@ export function FichePrestataire() {
     if (!client || !moi || !statut || envoi) return;
     setEnvoi(true);
     setBandeau(null);
+    let resultat;
     try {
-      await demanderA(client, statut.userId, { pseudo: moi.pseudo, zone: moi.zone });
+      resultat = await demanderA(client, statut.userId, { pseudo: moi.pseudo, zone: moi.zone });
     } catch (e) {
       setEnvoi(false);
       setBandeau(familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME);
       return;
     }
-    navigate(retour, { state: etatSucces(`Demande envoyée à ${statut.pseudo}`) });
+    // Bulle déjà ouverte avec cette personne : on y va directement.
+    if (resultat.reutilisee) navigate(cheminBulle(resultat.roomId));
+    else navigate(retour, { state: etatSucces(`Demande envoyée à ${statut.pseudo}`) });
   }
 
   if (reseauKo || !vue.pret || !statut) {

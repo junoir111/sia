@@ -113,6 +113,7 @@ function afficher(adresse: string | { pathname: string; state: unknown }) {
         <Route path={CHEMINS.profilClient} element={<p>écran profil client</p>} />
         <Route path={CHEMINS.profilPrestataire} element={<p>écran profil prestataire</p>} />
         <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
+        <Route path={CHEMINS.bulle} element={<p>écran bulle</p>} />
         <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
       </Routes>
     </MemoryRouter>,
@@ -128,8 +129,8 @@ describe('Écrans du Mur', () => {
     vi.mocked(lireSession).mockReturnValue(SESSION);
     vi.mocked(lireProfil).mockReset().mockResolvedValue({ ok: true, profil: null });
     vi.mocked(lireProfilClient).mockReset().mockResolvedValue(PROFIL_CLIENT);
-    vi.mocked(demanderA).mockReset().mockResolvedValue('!bulle:sia');
-    vi.mocked(direOui).mockReset().mockResolvedValue('!bulle:sia');
+    vi.mocked(demanderA).mockReset().mockResolvedValue({ roomId: '!bulle:sia', reutilisee: false });
+    vi.mocked(direOui).mockReset().mockResolvedValue({ roomId: '!bulle:sia', reutilisee: false });
     murSimule();
   });
 
@@ -342,6 +343,14 @@ describe('Écrans du Mur', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Demande envoyée à mangue-douce');
     });
 
+    it('bulle déjà ouverte avec lui : Demander mène directement dans cette bulle', async () => {
+      vi.mocked(demanderA).mockResolvedValue({ roomId: '!vieille:sia', reutilisee: true });
+      afficher(cheminFichePrestataire('$p1', 'Plombier', 'Akanda'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
+      expect(await screen.findByText('écran bulle')).toBeInTheDocument();
+      expect(lieu()).toBe('/bulle/!vieille%3Asia');
+    });
+
     it('échec réseau : bandeau, on reste sur la fiche', async () => {
       vi.mocked(demanderA).mockRejectedValue(
         Object.assign(new Error('coupé'), { name: 'ConnectionError' }),
@@ -383,6 +392,13 @@ describe('Écrans du Mur', () => {
         { pseudo: 'cocotier-7', zone: 'Akanda' },
       );
       expect(screen.getByRole('status')).toHaveTextContent('Réponse envoyée à palmier-48');
+    });
+
+    it('bulle déjà ouverte avec ce client : « D’accord ? » mène dans cette bulle', async () => {
+      vi.mocked(direOui).mockResolvedValue({ roomId: '!vieille:sia', reutilisee: true });
+      afficher(cheminFicheDemande('$d1', 'Plombier', 'Akanda'));
+      fireEvent.click(await screen.findByRole('button', { name: "D'accord ?" }));
+      expect(await screen.findByText('écran bulle')).toBeInTheDocument();
     });
 
     it('un client ne voit pas « D’accord ? »', async () => {

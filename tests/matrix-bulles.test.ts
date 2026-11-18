@@ -129,8 +129,12 @@ afterEach(() => vi.useRealTimers());
 describe('direOui', () => {
   it('crée une bulle chiffrée « SIA · Bulle » et invite le client avec la référence', async () => {
     const c = fauxClient([murAvecDemande()]);
-    const roomId = await direOui(comme(c), DEMANDE, '$dem', { pseudo: 'puma', zone: 'Nzeng' });
+    const { roomId, reutilisee } = await direOui(comme(c), DEMANDE, '$dem', {
+      pseudo: 'puma',
+      zone: 'Nzeng',
+    });
     expect(roomId).toBe('!bulle:sia.tail94dc60.ts.net');
+    expect(reutilisee).toBe(false);
     const options = (c.createRoom.mock.calls[0] as unknown[] | undefined)?.[0] as Record<
       string,
       unknown
@@ -161,6 +165,16 @@ describe('direOui', () => {
     await expect(direOui(comme(c2), DEMANDE, '$dem', moi)).rejects.toThrow();
     expect(c.createRoom).not.toHaveBeenCalled();
     expect(c2.createRoom).not.toHaveBeenCalled();
+  });
+
+  it('réutilise la bulle déjà ouverte avec ce client (« Demander » de sa part) sans en créer une 2e', async () => {
+    const directe = { participants: ETAT_CLIENT.participants };
+    const c = fauxClient([murAvecDemande(), bulleA2(AUTRE, etatChiffre(directe, AUTRE))]);
+    await expect(
+      direOui(comme(c), DEMANDE, '$dem', { pseudo: 'puma', zone: 'Nzeng' }),
+    ).resolves.toEqual({ roomId: BULLE, reutilisee: true });
+    expect(c.createRoom).not.toHaveBeenCalled();
+    expect(c.invite).not.toHaveBeenCalled();
   });
 
   it("quitte la bulle créée si l'invitation échoue", async () => {

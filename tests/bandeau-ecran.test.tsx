@@ -87,7 +87,7 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
       bullesChangent = rappel;
       return () => undefined;
     });
-    vi.mocked(direOui).mockReset().mockResolvedValue('!bulle:sia');
+    vi.mocked(direOui).mockReset().mockResolvedValue({ roomId: '!bulle:sia', reutilisee: false });
     vi.mocked(accepterOffre).mockReset().mockResolvedValue(undefined);
     vi.mocked(refuserOffre).mockReset().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'vibrate', { value: vi.fn(), configurable: true });
@@ -120,6 +120,14 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
       },
     );
     expect(JSON.parse(localStorage.getItem('sia.vues') ?? '[]')).toEqual(['$d1']);
+  });
+
+  it('Oui avec une bulle déjà ouverte avec ce client : on va dans cette bulle', async () => {
+    vi.mocked(direOui).mockResolvedValue({ roomId: '!vieille:sia', reutilisee: true });
+    afficher();
+    act(() => nouvelleDemande(demande('$d1')));
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(await screen.findByText('écran bulle')).toBeInTheDocument();
   });
 
   it('Non : marquée vue, plus jamais proposée', async () => {

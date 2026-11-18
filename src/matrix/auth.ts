@@ -20,6 +20,7 @@ export type ErreurInscription =
   | 'identifiant-invalide'
   | 'mot-de-passe-faible'
   | 'reseau'
+  | 'trop-de-demandes'
   | 'inconnue';
 export type ResultatInscription =
   { ok: true; session: Session } | { ok: false; erreur: ErreurInscription };
@@ -32,6 +33,12 @@ const NOM_APPAREIL = 'SIA';
 const DELAI_RESEAU_MS = 20_000;
 const TAILLE_MAX_REPONSE = 64 * 1024;
 const MAX_ETAPES = 3;
+/** Serveur qui limite le débit (HTTP 429) : attente bornée, 3 réessais au plus. */
+const STATUT_TROP_DE_DEMANDES = 429;
+const MAX_REESSAIS_429 = 3;
+const ATTENTE_DEFAUT_MS = 2_000;
+const ATTENTE_MIN_MS = 500;
+const ATTENTE_MAX_MS = 5_000;
 
 /** Mot de passe : 10 signes minimum (document 5, table COMPTE). */
 export const MOT_DE_PASSE_MIN = 10;
@@ -81,7 +88,28 @@ function verifierSaisie(
   return null;
 }
 
+/** Attente demandée par le serveur (`retry_after_ms`), bornée ; 2 s si absente ou invalide. */
+function attenteAvantReessai(corps: Record<string, unknown> | null): number {
+  const demande = corps?.retry_after_ms;
+  if (typeof demande !== 'number' || !Number.isFinite(demande)) return ATTENTE_DEFAUT_MS;
+  return Math.min(ATTENTE_MAX_MS, Math.max(ATTENTE_MIN_MS, demande));
+}
+
 async function envoyer(
+  corps: Record<string, unknown>,
+  url: string = URL_INSCRIPTION,
+): Promise<Reponse | 'reseau'> {
+  let reponse = await envoyerUneFois(corps, url);
+  for (let essai = 0; essai < MAX_REESSAIS_429; essai += 1) {
+    if (reponse === 'reseau' || reponse.statut !== STATUT_TROP_DE_DEMANDES) break;
+    const attente = attenteAvantReessai(reponse.corps);
+    await new Promise<void>((resoudre) => setTimeout(resoudre, attente));
+    reponse = await envoyerUneFois(corps, url);
+  }
+  return reponse;
+}
+
+async function envoyerUneFois(
   corps: Record<string, unknown>,
   url: string = URL_INSCRIPTION,
 ): Promise<Reponse | 'reseau'> {
@@ -152,6 +180,7 @@ function lireSessionServeur(corps: Record<string, unknown> | null): Session | nu
 
 function traduireErreur(reponse: Reponse, jetonEnvoye: boolean): ErreurInscription {
   if (STATUTS_SERVEUR_INJOIGNABLE.includes(reponse.statut) && !reponse.corps) return 'reseau';
+  if (reponse.statut === STATUT_TROP_DE_DEMANDES) return 'trop-de-demandes';
   const code = reponse.corps?.errcode;
   if (code === 'M_USER_IN_USE') return 'identifiant-pris';
   if (code === 'M_INVALID_USERNAME') return 'identifiant-invalide';
@@ -205,7 +234,7 @@ export async function creerCompte(
   return echec('inconnue');
 }
 
-export type ErreurConnexion = 'identifiants' | 'reseau' | 'inconnue';
+export type ErreurConnexion = 'identifiants' | 'reseau' | 'trop-de-demandes' | 'inconnue';
 export type ResultatConnexion =
   { ok: true; session: Session } | { ok: false; erreur: ErreurConnexion };
 
@@ -249,6 +278,9 @@ export async function connecter(
   }
   if (STATUTS_SERVEUR_INJOIGNABLE.includes(reponse.statut) && !reponse.corps) {
     return { ok: false, erreur: 'reseau' };
+  }
+  if (reponse.statut === STATUT_TROP_DE_DEMANDES) {
+    return { ok: false, erreur: 'trop-de-demandes' };
   }
   return { ok: false, erreur: 'inconnue' };
 }
