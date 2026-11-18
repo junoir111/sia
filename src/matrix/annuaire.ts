@@ -57,6 +57,18 @@ export function pseudoDe(userId: string): string | null {
 }
 
 /**
+ * Vrai si ce pseudo peut être affiché pour ce compte : libre, ou déjà à lui. N'ENREGISTRE RIEN.
+ * À utiliser pour tout pseudo venu d'un texte libre (raison d'invitation, état de bulle) :
+ * seuls un statut ou une annonce du Mur ont le droit de réserver un pseudo (noterPseudo).
+ */
+export function pseudoCompatible(userId: string, pseudo: string): boolean {
+  const propre = texteSur(pseudo, LIMITES.pseudo);
+  if (!estUserId(userId) || propre === null) return false;
+  const proprietaire = lire().find((e) => cle(e.pseudo) === cle(propre));
+  return proprietaire === undefined || proprietaire.userId === userId;
+}
+
+/**
  * Note qu'un compte utilise un pseudo. Rend false si le pseudo appartient déjà à un AUTRE compte
  * (ou si les données sont invalides) : l'annonce doit alors être ignorée.
  */

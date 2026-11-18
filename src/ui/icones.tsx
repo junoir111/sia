@@ -124,6 +124,14 @@ export function IconeEnvoyer({ taille = 24, className }: ProprietesIcone) {
   );
 }
 
+export function IconePlus({ taille = 28, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={2.2}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 /** Deux bulles de discussion : accès à la liste des bulles. */
 export function IconeBulles({ taille = 24, className }: ProprietesIcone) {
   return (

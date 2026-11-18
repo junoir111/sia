@@ -4,6 +4,8 @@
  * fonctions de nettoyage de src/logique/ : rien de ce qui vient du réseau n'est cru sur parole.
  */
 
+import type { Modalite } from '../logique/profil';
+
 export const TYPE_ANNONCE = 'io.sia.annonce';
 export const TYPE_STATUT = 'io.sia.statut';
 export const TYPE_BULLE = 'io.sia.bulle';
@@ -21,7 +23,18 @@ export type ContenuAnnonce = {
   fin: number;
 };
 
-export type ContenuStatut = { pseudo: string; metier: string; zone: string; fin: number };
+/**
+ * `services` : prix indicatifs facultatifs (3 au plus, label 40 max, prix entier en FCFA).
+ * `modalite` : facultative ; une valeur inconnue à la lecture est ignorée.
+ */
+export type ContenuStatut = {
+  pseudo: string;
+  metier: string;
+  zone: string;
+  fin: number;
+  modalite?: Modalite;
+  services?: { label: string; prix: number }[];
+};
 
 export type ContenuEtatBulle = {
   demande: { annonce: string; service: string; zone: string; budget: number; texte: string };

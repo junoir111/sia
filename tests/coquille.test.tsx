@@ -154,18 +154,18 @@ describe('FournisseurMatrix', () => {
 });
 
 describe('cheminApresConnexion', () => {
-  it('profil prestataire → E5', async () => {
+  it('profil prestataire → le Mur (E7)', async () => {
     faux.lireProfil.mockResolvedValue({ ok: true, profil: { role: 'prestataire' } });
     expect(await cheminApresConnexion(SESSION)).toEqual({
       ok: true,
-      chemin: CHEMINS.profilPrestataire,
+      chemin: CHEMINS.mur,
     });
   });
 
-  it('profil client → E6', async () => {
+  it('profil client → le Mur (E7)', async () => {
     faux.lireProfil.mockResolvedValue({ ok: true, profil: null });
     faux.lireProfilClient.mockResolvedValue({ ok: true, profil: { role: 'client' } });
-    expect(await cheminApresConnexion(SESSION)).toEqual({ ok: true, chemin: CHEMINS.profilClient });
+    expect(await cheminApresConnexion(SESSION)).toEqual({ ok: true, chemin: CHEMINS.mur });
   });
 
   it('pas de profil → E4 (choix du rôle)', async () => {

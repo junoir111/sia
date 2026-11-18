@@ -1,0 +1,295 @@
+/* Composants du Mur : tuile, cartes, bouton flottant, en-tête de page. Maquettes : planche-mur.jpg, planche-mur-suite.jpg. */
+
+/* --- Tuile de métier (grille du Mur) --- */
+.tuile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 104px;
+  padding: 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+  color: var(--sia-texte);
+  text-decoration: none;
+  transition: border-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tuile:active {
+  border-color: var(--sia-contour);
+}
+
+.tuile:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.tuile--vide {
+  background: var(--sia-fond);
+}
+
+.tuile__nom {
+  font-size: var(--sia-corps);
+  font-weight: 600;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.tuile--vide .tuile__nom {
+  color: var(--sia-texte-doux);
+}
+
+.tuile__ligne {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+}
+
+.tuile__ligne--dispo {
+  color: var(--sia-accent);
+  font-weight: 500;
+}
+
+.tuile__ligne--rien {
+  color: var(--sia-indice);
+}
+
+.tuile__point {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+}
+
+.tuile__point--gris {
+  background: var(--sia-eteint);
+}
+
+/* --- Bouton flottant (« + » ou « Je suis disponible »), en bas à droite --- */
+.rond-flottant {
+  position: fixed;
+  right: max(var(--sia-marge), calc(50% - 240px + var(--sia-marge)));
+  bottom: calc(env(safe-area-inset-bottom) + 24px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.55);
+  color: var(--sia-sur-accent);
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rond-flottant--texte {
+  width: auto;
+  padding: 0 24px;
+}
+
+.rond-flottant:active {
+  transform: scale(0.96);
+}
+
+.rond-flottant:focus-visible {
+  outline: 2px solid var(--sia-texte);
+  outline-offset: 2px;
+}
+
+/* --- En-tête des pages secondaires : flèche retour + titre --- */
+.retour {
+  text-decoration: none;
+}
+
+.entete-page {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--sia-toucher);
+}
+
+.entete-page__titre {
+  margin: 0;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+  overflow-wrap: anywhere;
+}
+
+/* --- Cartes de la liste d'un métier --- */
+.carte-ligne {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+  color: var(--sia-texte);
+  text-decoration: none;
+}
+
+.carte-ligne:active {
+  border-color: var(--sia-contour);
+}
+
+.carte-ligne:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.carte-ligne__textes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.carte-ligne__pseudo {
+  overflow: hidden;
+  font-size: var(--sia-corps);
+  font-weight: 600;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carte-ligne__info {
+  overflow: hidden;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carte-ligne__point {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+}
+
+.carte-annonce {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-carte);
+  color: var(--sia-texte);
+  text-decoration: none;
+}
+
+.carte-annonce:active {
+  border-color: var(--sia-contour);
+}
+
+.carte-annonce:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.carte-annonce__haut {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.carte-annonce__pseudo {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--sia-corps);
+  font-weight: 600;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carte-annonce__quand {
+  flex: none;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+}
+
+.carte-annonce__resume {
+  color: var(--sia-accent);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.carte-annonce__texte {
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.carte-annonce__bas {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.carte-annonce__puce {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 16px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-sur-accent);
+  font-size: var(--sia-libelle);
+  font-weight: 600;
+}
+
+/* --- Bandeau de succès --- */
+.bandeau-succes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 12px 16px 0;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-accent);
+  border-radius: var(--sia-rayon-carte);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.bandeau-succes__icone {
+  flex: none;
+  color: var(--sia-accent);
+}
+
+.bandeau-succes__lien {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--sia-toucher);
+  color: var(--sia-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tuile,
+  .rond-flottant {
+    transition: none;
+  }
+}

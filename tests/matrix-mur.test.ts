@@ -87,6 +87,22 @@ describe('nettoyerStatut', () => {
   });
 });
 
+describe('nettoyerStatut : modalite', () => {
+  const base = { pseudo: 'puma', metier: 'Coiffeur', zone: 'Nzeng', fin: MAINTENANT + HEURE };
+
+  it('garde une modalité connue', () => {
+    for (const modalite of ['recoit', 'deplace', 'les-deux']) {
+      expect(nettoyerStatut({ ...base, modalite }, MAINTENANT)).toEqual({ ...base, modalite });
+    }
+  });
+
+  it('une modalité inconnue ou mal typée donne un statut sans modalité, sans refus', () => {
+    for (const modalite of ['teleporte', 3, null, {}, ['recoit'], 'RECOIT']) {
+      expect(nettoyerStatut({ ...base, modalite }, MAINTENANT)).toEqual(base);
+    }
+  });
+});
+
 describe('rejoindreMur', () => {
   it("rejoint le Mur par son alias, puis réutilise l'identifiant", async () => {
     const c = fauxClient([mur()]);

@@ -1,4 +1,5 @@
 @import './composants.css';
+@import './composants-mur.css';
 
 /* Inter (licence OFL, voir polices/OFL.txt), incluse dans l'appli : rien n'est chargé en ligne. */
 @font-face {

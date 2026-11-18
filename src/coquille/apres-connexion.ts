@@ -7,13 +7,16 @@ export type ResultatApresConnexion =
 
 /**
  * Après une connexion réussie (E2) : où aller selon le profil enregistré sur le serveur.
- * Profil prestataire → E5, profil client → E6, aucun profil → E4 (choix du rôle).
+ * Un profil (prestataire ou client) → le Mur (E7), aucun profil → E4 (choix du rôle).
  */
 export async function cheminApresConnexion(session: Session): Promise<ResultatApresConnexion> {
   const prestataire = await lireProfil(session);
   if (!prestataire.ok) return prestataire;
-  if (prestataire.profil) return { ok: true, chemin: CHEMINS.profilPrestataire };
+  if (prestataire.profil) return { ok: true, chemin: CHEMINS.mur };
   const client = await lireProfilClient(session);
   if (!client.ok) return client;
-  return { ok: true, chemin: cheminApresInscription(client.profil ? 'client' : null) };
+  return {
+    ok: true,
+    chemin: cheminApresInscription(client.profil ? 'client' : null, client.profil !== null),
+  };
 }

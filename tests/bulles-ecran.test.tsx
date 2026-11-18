@@ -41,7 +41,7 @@ function afficher() {
       <Routes>
         <Route path={CHEMINS.bulles} element={<Bulles />} />
         <Route path={CHEMINS.bulle} element={<p>écran bulle</p>} />
-        <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
+        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -53,6 +53,11 @@ describe('Écran Bulles (M3)', () => {
     vi.mocked(listerBulles).mockReset().mockReturnValue([]);
     vi.mocked(accepterOffre).mockReset().mockResolvedValue(undefined);
     vi.mocked(refuserOffre).mockReset().mockResolvedValue(undefined);
+  });
+
+  it('montre le bouton Se déconnecter', () => {
+    afficher();
+    expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
   });
 
   it('titre, rappel et liste vide', () => {
@@ -97,6 +102,20 @@ describe('Écran Bulles (M3)', () => {
     expect(accepterOffre).toHaveBeenCalledWith(CLIENT, '!o:sia');
   });
 
+  it('invitation directe (un client te demande) : « vous demande » au lieu de « dit oui »', () => {
+    vi.mocked(listerBulles).mockReturnValue([
+      {
+        ...bulle({ roomId: '!d:sia', pseudo: 'palmier-48', etat: 'invitation-recue' }),
+        demande: null,
+        invitationDirecte: true,
+      },
+      bulle({ roomId: '!o:sia', pseudo: 'mangue', etat: 'invitation-recue' }),
+    ]);
+    afficher();
+    expect(screen.getByText('vous demande')).toBeInTheDocument();
+    expect(screen.getByText('dit oui')).toBeInTheDocument();
+  });
+
   it('offre reçue : Non la refuse', async () => {
     vi.mocked(listerBulles).mockReturnValue([
       bulle({ roomId: '!o:sia', pseudo: 'mangue', etat: 'invitation-recue' }),
@@ -113,9 +132,9 @@ describe('Écran Bulles (M3)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
   });
 
-  it('flèche retour sans historique : accueil', () => {
+  it('flèche retour : le Mur', () => {
     afficher();
     fireEvent.click(screen.getByRole('button', { name: 'Retour' }));
-    expect(screen.getByText('écran accueil')).toBeInTheDocument();
+    expect(screen.getByText('écran mur')).toBeInTheDocument();
   });
 });

@@ -135,3 +135,7 @@
   font-size: var(--sia-libelle);
   text-align: center;
 }
+
+.bulles .deconnexion {
+  margin-top: 32px;
+}

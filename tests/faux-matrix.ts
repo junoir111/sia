@@ -132,6 +132,7 @@ export function fauxClient(
     createRoom: vi.fn(async () => ({ room_id: '!bulle:sia.tail94dc60.ts.net' })),
     invite: vi.fn(async () => ({})),
     leave: vi.fn(async () => ({})),
+    kick: vi.fn(async () => ({})),
     sendTyping: vi.fn(async () => ({})),
     paginateEventTimeline: vi.fn(async () => false),
     fetchRoomEvent: vi.fn(async () => ({})),

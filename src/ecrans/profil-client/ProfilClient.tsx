@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { CHEMINS } from '../../chemins';
+import { CHEMINS, cheminMur } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { TEXTE_DEMANDE_MAX, verifierDemande } from '../../logique/demande';
 import type { DemandeClient, ErreursDemande } from '../../logique/demande';
@@ -15,6 +15,7 @@ import { enregistrerProfilClient, lireProfilClient } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { AccesBulles } from '../../ui/AccesBulles';
 import { Bandeau } from '../../ui/Bandeau';
+import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
 import { BoutonSia } from '../../ui/BoutonSia';
 import { ChampQuartier } from '../../ui/ChampQuartier';
 import { MessageErreur } from '../../ui/MessageErreur';
@@ -43,6 +44,7 @@ function compterOui(bulles: readonly ResumeBulle[] | null, enCours: DemandeEnCou
   return bulles.filter(
     (b) =>
       b.etat === 'invitation-recue' &&
+      !b.invitationDirecte &&
       (b.demande === null || b.demande.annonce === enCours.eventId),
   ).length;
 }
@@ -190,6 +192,7 @@ export function ProfilClient() {
       } catch {
         // Stockage plein ou bloqué : la demande reste publiée, elle expirera seule.
       }
+      navigate(cheminMur());
     } catch (e) {
       echec(e);
     }
@@ -369,6 +372,7 @@ export function ProfilClient() {
         </p>
       </div>
       <div className="client__espace client__espace--bas" />
+      <BoutonDeconnexion />
     </main>
   );
 }

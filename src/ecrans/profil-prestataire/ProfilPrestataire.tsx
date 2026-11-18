@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { CHEMINS } from '../../chemins';
+import { CHEMINS, cheminMur } from '../../chemins';
 import { DUREE_MAX_ANNONCE_MS } from '../../config';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import {
@@ -27,6 +27,7 @@ import { effacerPhoto, enregistrerPhoto, lirePhoto, preparerPhoto } from '../../
 import { AccesBulles } from '../../ui/AccesBulles';
 import { Avatar } from '../../ui/Avatar';
 import { Bandeau } from '../../ui/Bandeau';
+import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
 import { BoutonSia } from '../../ui/BoutonSia';
 import { ChampQuartier } from '../../ui/ChampQuartier';
 import { LigneService } from '../../ui/LigneService';
@@ -206,12 +207,14 @@ export function ProfilPrestataire() {
       else setBandeau(MESSAGES[resultat.erreur]);
       return;
     }
-    const { pseudo, metier, zone } = verifie.profil;
+    const { pseudo, metier, zone, modalite, services } = verifie.profil;
     try {
       await publierStatut(exigerClient(client), {
         pseudo,
         metier,
         zone,
+        modalite,
+        ...(services.length > 0 ? { services } : {}),
         fin: Date.now() + DUREE_MAX_ANNONCE_MS,
       });
     } catch (e) {
@@ -229,6 +232,7 @@ export function ProfilPrestataire() {
     setModifie(false);
     setEteint(false);
     setVisibleA(verifie.profil.zone);
+    navigate(cheminMur());
   }
 
   async function choisirPhoto(fichier: File) {
@@ -402,6 +406,7 @@ export function ProfilPrestataire() {
           </p>
         </div>
         <div className="profil__espace profil__espace--bas" />
+        <BoutonDeconnexion />
       </fieldset>
     </main>
   );

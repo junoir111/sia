@@ -767,3 +767,14 @@
     transition: none;
   }
 }
+
+/* --- Se déconnecter : discret, en bas de l'écran --- */
+.deconnexion {
+  margin-top: 16px;
+}
+
+.deconnexion__bouton {
+  min-height: var(--sia-toucher);
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+}

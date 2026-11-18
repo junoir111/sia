@@ -123,6 +123,7 @@ function afficher() {
       <Routes>
         <Route path={CHEMINS.bulle} element={<Bulle />} />
         <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
+        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -178,7 +179,7 @@ describe('Écran Bulle (M4)', () => {
     expect(screen.getByRole('heading', { name: 'baobab-7' })).toBeInTheDocument();
   });
 
-  it('bulle pas sûre : aucun message, alerte, puis retour aux bulles', async () => {
+  it('bulle pas sûre : aucun message, alerte, puis retour au Mur', async () => {
     vi.mocked(bulleSaine).mockReturnValue(false);
     afficher();
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -187,7 +188,7 @@ describe('Écran Bulle (M4)', () => {
     expect(screen.queryByText('6 000 ?')).not.toBeInTheDocument();
     expect(marquerAffiche).not.toHaveBeenCalled();
     expect(champ()).toBeDisabled();
-    expect(await screen.findByText('écran bulles', {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText('écran mur', {}, { timeout: 4000 })).toBeInTheDocument();
   });
 
   it('nouvel appareil : confirmation, Continuer accepte puis renvoie', async () => {
@@ -262,12 +263,12 @@ describe('Écran Bulle (M4)', () => {
     expect(champ()).toHaveValue('Allô');
   });
 
-  it('Silence Radio : confirmation, puis tout s’efface et retour aux bulles', async () => {
+  it('Silence Radio : confirmation, puis tout s’efface et retour au Mur', async () => {
     afficher();
     fireEvent.click(screen.getByRole('button', { name: 'Silence Radio' }));
     expect(screen.getByRole('dialog', { name: 'Silence Radio ?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tout effacer' }));
-    expect(await screen.findByText('écran bulles')).toBeInTheDocument();
+    expect(await screen.findByText('écran mur')).toBeInTheDocument();
     expect(silenceRadio).toHaveBeenCalledWith(client, SALON);
   });
 
@@ -294,9 +295,9 @@ describe('Écran Bulle (M4)', () => {
     expect(champ()).toBeDisabled();
   });
 
-  it('flèche : retour aux bulles', () => {
+  it('flèche « Le Mur » : retour au Mur', () => {
     afficher();
-    fireEvent.click(screen.getByRole('button', { name: 'Retour aux bulles' }));
-    expect(screen.getByText('écran bulles')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Le Mur' }));
+    expect(screen.getByText('écran mur')).toBeInTheDocument();
   });
 });

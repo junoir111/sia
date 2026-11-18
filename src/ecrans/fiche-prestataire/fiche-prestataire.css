@@ -1,0 +1,121 @@
+/* E9 Fiche d'un prestataire — maquette planche-mur-suite.jpg, écran 3, en page entière (375 × 812). */
+.fiche__qui {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.fiche__textes {
+  min-width: 0;
+}
+
+.fiche__pseudo {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 29px;
+  overflow-wrap: anywhere;
+}
+
+.fiche__dispo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--sia-accent);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.fiche__point {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--sia-accent);
+  border-radius: var(--sia-rayon-rond);
+}
+
+.fiche__metier {
+  margin: 24px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-corps);
+}
+
+.fiche__metier--serre {
+  margin: 4px 0 0;
+  font-size: var(--sia-libelle);
+}
+
+.fiche__section {
+  margin: 24px 0 8px;
+  font-size: var(--sia-libelle);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.fiche__services {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fiche__service {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--sia-toucher);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--sia-ligne);
+}
+
+.fiche__service > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fiche__prix {
+  flex: none;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  font-variant-numeric: tabular-nums;
+}
+
+.fiche__bas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 32px;
+}
+
+.fiche__note {
+  margin: 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  line-height: 18px;
+  text-align: center;
+}
+
+.fiche__vide {
+  margin: 24px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  text-align: center;
+}
+
+/* Fiche d'une demande (E9 bis) : mêmes bases que la fiche prestataire. */
+.fiche__resume {
+  margin: 24px 0 0;
+  color: var(--sia-accent);
+  font-size: var(--sia-corps);
+  font-weight: 500;
+}
+
+.fiche__texte {
+  margin: 8px 0 0;
+  color: var(--sia-texte-doux);
+  overflow-wrap: anywhere;
+}

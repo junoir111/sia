@@ -2,7 +2,7 @@ import { effacerPhoto } from '../appareil/photo';
 import { ADRESSE_SERVEUR } from '../config';
 import { arreterClient, clientActif, PREFIXE_BASE_CRYPTO } from './client';
 import { toutEffacerMaintenant } from './ephemere';
-import { oublierMur } from './mur';
+import { oublierMur, retirerMesPublications } from './mur';
 import { effacerSession, estSession } from './session';
 
 /*
@@ -264,6 +264,8 @@ const CLES_APPAREIL = [
 ];
 /** Temps laissé aux effacements en attente avant d'annuler le jeton. */
 const DELAI_EFFACEMENTS_MS = 10_000;
+/** Délai maximal pour retirer mon statut et mes demandes du Mur avant de quitter (hors-ligne : on n'attend pas). */
+const DELAI_RETRAIT_MUR_MS = 5_000;
 /** Bases IndexedDB du chiffrement Rust (noms fixés par matrix-js-sdk à partir du préfixe). */
 function basesChiffrement(): string[] {
   return [
@@ -311,26 +313,37 @@ function effacerBase(nom: string): Promise<void> {
   });
 }
 
-/** Efface tout de suite les messages en file (il faut encore le jeton), 10 s au plus. */
-async function effacerMessagesEnAttente(): Promise<void> {
-  const c = clientActif();
-  if (!c) return;
+/** Attend `tache` au plus `delaiMs` ; n'échoue jamais. */
+async function avecDelai(tache: Promise<unknown>, delaiMs: number): Promise<void> {
   let minuterie: ReturnType<typeof setTimeout> | undefined;
   const delai = new Promise<void>((resoudre) => {
-    minuterie = setTimeout(resoudre, DELAI_EFFACEMENTS_MS);
+    minuterie = setTimeout(resoudre, delaiMs);
   });
   try {
-    await Promise.race([toutEffacerMaintenant(c).catch(() => undefined), delai]);
+    await Promise.race([tache.catch(() => undefined), delai]);
   } finally {
     clearTimeout(minuterie);
   }
 }
 
+/** Retire mon statut et mes demandes du Mur (il faut encore le jeton), 5 s au plus. */
+async function retirerDuMur(): Promise<void> {
+  const c = clientActif();
+  if (c) await avecDelai(retirerMesPublications(c), DELAI_RETRAIT_MUR_MS);
+}
+
+/** Efface tout de suite les messages en file (il faut encore le jeton), 10 s au plus. */
+async function effacerMessagesEnAttente(): Promise<void> {
+  const c = clientActif();
+  if (c) await avecDelai(toutEffacerMaintenant(c), DELAI_EFFACEMENTS_MS);
+}
+
 /**
- * Déconnexion (document 5, §4.5) : jeton annulé sur le serveur, puis données de l'appareil effacées
+ * Déconnexion (document 5, §4.5) : statut et demandes retirés du Mur, messages en file effacés, jeton annulé sur le serveur, puis données de l'appareil effacées
  * (session, état local, photo, clés de chiffrement). Ne rejette jamais : chaque étape est tentée.
  */
 export async function deconnecter(session: Session): Promise<void> {
+  await retirerDuMur();
   await effacerMessagesEnAttente();
   await annulerJeton(session);
   essayer(() => arreterClient());

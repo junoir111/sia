@@ -33,7 +33,7 @@ const RAPPEL_ECRITURE_MS = 3000;
 const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
 const PROBLEME = 'Un problème est survenu. Réessaie.';
 const PAS_SURE = "Cette bulle n'est pas sûre. Elle a été fermée.";
-/** Le temps de lire « pas sûre » avant le retour aux bulles. */
+/** Le temps de lire « pas sûre » avant le retour au Mur. */
 const RETOUR_PAS_SURE_MS = 3000;
 
 function estNouvelAppareil(e: unknown): boolean {
@@ -142,7 +142,7 @@ export function Bulle() {
   useEffect(() => {
     if (!pasSure) return;
     const minuterie = setTimeout(
-      () => navigate(CHEMINS.bulles, { replace: true }),
+      () => navigate(CHEMINS.mur, { replace: true }),
       RETOUR_PAS_SURE_MS,
     );
     return () => clearTimeout(minuterie);
@@ -213,7 +213,7 @@ export function Bulle() {
     setErreurSilence(null);
     try {
       await silenceRadio(client, roomId);
-      navigate(CHEMINS.bulles, { replace: true });
+      navigate(CHEMINS.mur, { replace: true });
     } catch (erreur) {
       setErreurSilence(messageErreur(erreur));
       setEffacement(false);
@@ -229,8 +229,8 @@ export function Bulle() {
         <button
           type="button"
           className="retour bulle__retour"
-          aria-label="Retour aux bulles"
-          onClick={() => navigate(CHEMINS.bulles)}
+          aria-label="Le Mur"
+          onClick={() => navigate(CHEMINS.mur)}
         >
           <IconeRetour />
         </button>

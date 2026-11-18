@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { noterPseudo, pseudoDe } from '../src/matrix/annuaire';
+import { noterPseudo, pseudoCompatible, pseudoDe } from '../src/matrix/annuaire';
 
 const A = '@a:sia.tail94dc60.ts.net';
 const B = '@b:sia.tail94dc60.ts.net';
@@ -32,5 +32,17 @@ describe('annuaire pseudo ↔ compte', () => {
     for (let i = 0; i < 510; i += 1) noterPseudo(`@u${i}:sia.tail94dc60.ts.net`, `p${i}`);
     const liste: unknown = JSON.parse(localStorage.getItem('sia.annuaire') ?? '[]');
     expect(Array.isArray(liste) && liste.length).toBe(500);
+  });
+
+  it("pseudoCompatible vérifie sans jamais rien enregistrer (une raison d'invitation libre ne note rien)", () => {
+    expect(pseudoCompatible(A, 'puma')).toBe(true);
+    expect(localStorage.getItem('sia.annuaire')).toBeNull();
+    noterPseudo(A, 'puma');
+    expect(pseudoCompatible(A, 'PUMA')).toBe(true);
+    expect(pseudoCompatible(B, 'puma')).toBe(false);
+    expect(pseudoCompatible(B, 'lion')).toBe(true);
+    expect(pseudoDe(B)).toBeNull();
+    expect(pseudoCompatible('pas-un-compte', 'lion')).toBe(false);
+    expect(pseudoCompatible(A, '')).toBe(false);
   });
 });

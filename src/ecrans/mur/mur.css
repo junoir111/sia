@@ -1,0 +1,147 @@
+/* E7 Le Mur — maquettes planche-mur.jpg (modèle 1) et planche-mur-suite.jpg (375 × 812). */
+.mur {
+  /* de la place sous la grille pour le bouton flottant (56 px + 24 px de marge + 16 px) */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 96px);
+}
+
+.mur__entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--sia-toucher);
+  margin-top: 24px;
+}
+
+.mur__titre {
+  margin: 0;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+/* Rond d'initiale = bouton « Mon compte » (48 px). */
+.mur__compte {
+  display: flex;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  cursor: pointer;
+}
+
+.mur__compte:active .rond-initiale {
+  border-color: var(--sia-accent);
+}
+
+.mur__compte:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.mur__recherche {
+  position: relative;
+  margin-top: 16px;
+}
+
+.mur__loupe {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: var(--sia-texte-doux);
+  pointer-events: none;
+}
+
+.mur__saisie {
+  padding-left: 44px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.mur__saisie::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.mur__phrase {
+  margin: 16px 0;
+  color: var(--sia-accent);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.mur__attente {
+  margin: 24px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  text-align: center;
+}
+
+.mur__grille {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mur > .bandeau {
+  margin-top: 16px;
+}
+
+/* --- Mon compte --- */
+.compte__qui {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.compte__textes {
+  min-width: 0;
+}
+
+.compte__pseudo {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 29px;
+  overflow-wrap: anywhere;
+}
+
+.compte__role {
+  margin: 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+}
+
+.compte__liens {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compte__lien {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--sia-toucher);
+  color: var(--sia-texte);
+  text-decoration: none;
+}
+
+.compte__lien > span:first-of-type {
+  flex: 1;
+}
+
+.compte__lien:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.compte__icone {
+  color: var(--sia-texte-doux);
+}
+
+.compte__fermer {
+  margin-top: 8px;
+}

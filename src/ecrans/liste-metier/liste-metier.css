@@ -1,0 +1,28 @@
+/* E8 Liste d'un métier — maquette planche-mur-suite.jpg, écran 2 (375 × 812). */
+.liste {
+  gap: 16px;
+}
+
+.liste__section {
+  margin: 8px 0 12px;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.liste__cartes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.liste__vide {
+  margin: 24px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  text-align: center;
+}

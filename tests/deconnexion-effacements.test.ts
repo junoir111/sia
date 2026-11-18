@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fauxClient } from './faux-matrix';
+import { ALIAS_MUR } from '../src/config';
+import { AUTRE, MOI, MUR, evenement, fauxClient, salon } from './faux-matrix';
 
 const faux = vi.hoisted(() => ({ client: null as unknown }));
 
@@ -81,6 +82,80 @@ describe('deconnecter : effacements en attente', () => {
 
     const fin = deconnecter(SESSION);
     await vi.advanceTimersByTimeAsync(9_999);
+    expect(fetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await fin;
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  function murAvecMesPublications() {
+    return salon({
+      roomId: MUR,
+      appartenance: 'join',
+      membres: {},
+      etat: {},
+      alias: ALIAS_MUR,
+      evenements: [
+        evenement({ type: 'io.sia.statut', id: '$s1', sender: MOI }),
+        evenement({ type: 'io.sia.annonce', id: '$a1', sender: MOI }),
+        evenement({ type: 'io.sia.annonce', id: '$a2', sender: AUTRE }),
+        evenement({ type: 'io.sia.statut', id: '$s2', sender: AUTRE }),
+      ],
+    });
+  }
+
+  it('retire mon statut et ma demande du Mur AVANT d’annuler le jeton (et rien des autres)', async () => {
+    const ordre: string[] = [];
+    const c = fauxClient([murAvecMesPublications()]);
+    c.redactEvent.mockImplementation((async (_r: string, id: string) => {
+      ordre.push(`efface ${id}`);
+      return { event_id: '$x' };
+    }) as () => Promise<{ event_id: string }>);
+    faux.client = c;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        ordre.push('jeton annulé');
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    await deconnecter(SESSION);
+    expect(ordre.slice(-1)).toEqual(['jeton annulé']);
+    expect(ordre.slice(0, -1).sort()).toEqual(['efface $a1', 'efface $s1']);
+  });
+
+  it('retire aussi la demande gardée par ce téléphone', async () => {
+    const c = fauxClient([murAvecMesPublications()]);
+    faux.client = c;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    localStorage.setItem(
+      'sia.demande',
+      JSON.stringify({
+        eventId: '$garde',
+        demande: {
+          pseudo: 'puma',
+          service: 'Plombier',
+          zone: 'Akanda',
+          texte: '',
+          budget: 5000,
+          fin: Date.now() + 3_600_000,
+        },
+      }),
+    );
+    await deconnecter(SESSION);
+    const ids = c.redactEvent.mock.calls.map((a) => (a as unknown[])[1]);
+    expect(ids).toContain('$garde');
+  });
+
+  it('n’attend pas plus de 5 s un Mur injoignable (hors-ligne), puis déconnecte quand même', async () => {
+    vi.useFakeTimers();
+    const c = fauxClient([murAvecMesPublications()]);
+    c.redactEvent.mockImplementation(() => new Promise(() => undefined));
+    faux.client = c;
+    const fetch = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const fin = deconnecter(SESSION);
+    await vi.advanceTimersByTimeAsync(4_999);
     expect(fetch).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     await fin;

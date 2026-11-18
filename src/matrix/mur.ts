@@ -14,7 +14,8 @@ import {
 } from '../logique/demande';
 import type { AnnonceRecue } from '../logique/notification';
 import { estIdEvenement } from '../logique/offres';
-import { LIMITES, estObjet, texteSur } from '../logique/profil';
+import type { EntreeDemande, EntreeStatut } from '../logique/mur';
+import { LIMITES, estObjet, modaliteSure, texteSur, type Service } from '../logique/profil';
 import { noterPseudo } from './annuaire';
 import { TYPE_ANNONCE, TYPE_STATUT, type ContenuAnnonce, type ContenuStatut } from './evenements';
 
@@ -27,6 +28,10 @@ import { TYPE_ANNONCE, TYPE_STATUT, type ContenuAnnonce, type ContenuStatut } fr
 /** Demande lue sur le Mur : `contenu` est la copie NETTOYÉE (utilisable avec doitNotifier). */
 export type DemandeRecue = AnnonceRecue & { demande: DemandeClient; contenu: ContenuAnnonce };
 export type StatutPrestataire = ContenuStatut;
+/** Statut lu sur le Mur : un EntreeStatut, plus les services indicatifs publiés (3 au plus). */
+export type EntreeStatutMur = EntreeStatut & { services?: Service[] };
+/** Ce qu'on voit du Mur à un instant donné. */
+export type InstantaneMur = { statuts: EntreeStatutMur[]; demandes: EntreeDemande[] };
 
 const CLE_STATUT = 'sia.statut';
 /** Demande publiée par ce téléphone (écrite par l'écran profil-client). */
@@ -36,17 +41,45 @@ const TAILLE_PAGE = 50;
 
 let idMur: string | null = null;
 
-/** Statut « disponible » propre, ou null. Fin dans le futur et 24 h au plus après `reference`. */
+/** Services indicatifs : absents (rien), ou 3 au plus {label 40 max, prix entier 1..100 000 000}. */
+function servicesSurs(brut: unknown): Service[] | null {
+  if (brut === undefined) return [];
+  if (!Array.isArray(brut) || brut.length > LIMITES.servicesMax) return null;
+  const services: Service[] = [];
+  for (const v of brut) {
+    if (!estObjet(v)) return null;
+    const label = texteSur(v.label, LIMITES.service);
+    const prix = v.prix;
+    if (label === null || typeof prix !== 'number' || !Number.isInteger(prix)) return null;
+    if (prix < 1 || prix > LIMITES.prixMax) return null;
+    services.push({ label, prix });
+  }
+  return services;
+}
+
+/**
+ * Statut « disponible » propre, ou null. Fin dans le futur et 24 h au plus après `reference`.
+ * `services` (facultatif) : un `services` mal formé refuse tout le statut.
+ */
 export function nettoyerStatut(inconnu: unknown, reference: number): StatutPrestataire | null {
   if (!estObjet(inconnu)) return null;
   const pseudo = texteSur(inconnu.pseudo, LIMITES.pseudo);
   const metier = texteSur(inconnu.metier, LIMITES.metier);
   const zone = texteSur(inconnu.zone, LIMITES.zone);
   const fin = inconnu.fin;
-  if (pseudo === null || metier === null || zone === null) return null;
+  const services = servicesSurs(inconnu.services);
+  if (pseudo === null || metier === null || zone === null || services === null) return null;
   if (typeof fin !== 'number' || !Number.isInteger(fin) || fin < 0) return null;
   if (fin > reference + DUREE_MAX_ANNONCE_MS + TOLERANCE_HORLOGE_MS) return null;
-  return { pseudo, metier, zone, fin };
+  const modalite = modaliteSure(inconnu.modalite);
+  return {
+    pseudo,
+    metier,
+    zone,
+    fin,
+    ...(modalite ? { modalite } : {}),
+    ...(services.length > 0 ? { services } : {}),
+  };
 }
 
 /** Rejoint le Mur (s'il ne l'est pas déjà) et rend son identifiant. */
@@ -135,6 +168,34 @@ export async function retirerStatut(c: MatrixClient): Promise<void> {
     }
   }
   ecrireIdStatut(null);
+}
+
+/** Efface mes demandes encore visibles sur le Mur (celle gardée par ce téléphone et celles du fil). */
+export async function retirerMesDemandes(c: MatrixClient): Promise<void> {
+  const salon = await rejoindreMur(c);
+  const moi = c.getUserId();
+  const ids = new Set<string>();
+  const gardee = lireDemandeGardee();
+  if (gardee) ids.add(gardee.eventId);
+  for (const ev of c.getRoom(salon)?.getLiveTimeline().getEvents() ?? []) {
+    const id = ev.getId();
+    if (ev.getType() === TYPE_ANNONCE && ev.getSender() === moi && !ev.isRedacted() && id) {
+      ids.add(id);
+    }
+  }
+  for (const id of ids) {
+    try {
+      await c.redactEvent(salon, id);
+    } catch {
+      // Déjà effacée (ou plus visible) : rien à faire.
+    }
+  }
+}
+
+/** Avant la déconnexion : retire mon statut ET mes demandes du Mur (chacun tenté même si l'autre échoue). */
+export async function retirerMesPublications(c: MatrixClient): Promise<void> {
+  await rejoindreMur(c);
+  await Promise.allSettled([retirerStatut(c), retirerMesDemandes(c)]);
 }
 
 /** Lit un événement du Mur comme demande de client ; null s'il n'en est pas une valide. */
@@ -343,6 +404,129 @@ export function monStatutActif(
     if (statut && statut.fin > maintenant) return { eventId, statut };
   }
   return null;
+}
+
+/** Dernier événement de ce type par auteur (un effacé reste le dernier : « éteint » = plus rien). */
+function dernierParAuteur(evenements: readonly MatrixEvent[], type: string): MatrixEvent[] {
+  const derniers = new Map<string, MatrixEvent>();
+  for (const ev of evenements) {
+    const auteur = ev.getSender();
+    if (ev.getType() !== type || ev.isState() || typeof auteur !== 'string') continue;
+    const avant = derniers.get(auteur);
+    if (!avant || ev.getTs() >= avant.getTs()) derniers.set(auteur, ev);
+  }
+  // Du plus ancien au plus récent : le premier arrivé garde son pseudo dans l'annuaire.
+  return [...derniers.values()].sort((a, b) => a.getTs() - b.getTs());
+}
+
+function entreeStatut(ev: MatrixEvent, maintenant: number): EntreeStatutMur | null {
+  const eventId = ev.getId();
+  const userId = ev.getSender();
+  if (ev.isRedacted() || !estIdEvenement(eventId) || typeof userId !== 'string') return null;
+  const statut = nettoyerStatut(ev.getContent(), ev.getTs());
+  if (!statut || statut.fin <= maintenant || !noterPseudo(userId, statut.pseudo)) return null;
+  const { pseudo, metier, zone, fin, modalite, services } = statut;
+  return {
+    eventId,
+    userId,
+    pseudo,
+    metier,
+    zone,
+    fin,
+    ...(modalite ? { modalite } : {}),
+    ...(services ? { services } : {}),
+  };
+}
+
+function entreeDemande(ev: MatrixEvent, maintenant: number): EntreeDemande | null {
+  if (ev.isRedacted()) return null;
+  const d = lireDemande(ev);
+  if (!d || d.demande.fin <= maintenant || !noterPseudo(d.expediteur, d.demande.pseudo))
+    return null;
+  const { pseudo, service, zone, texte, budget, fin } = d.demande;
+  return {
+    eventId: d.eventId,
+    userId: d.expediteur,
+    pseudo,
+    service,
+    zone,
+    texte,
+    budget,
+    fin,
+    creeLe: ev.getTs(),
+  };
+}
+
+/** Ce que montre le Mur maintenant (sans réseau) : 1 statut et 1 demande valables au plus par personne. */
+function instantane(salon: Room, maintenant: number): InstantaneMur {
+  const evenements = salon.getLiveTimeline().getEvents();
+  const statuts: EntreeStatutMur[] = [];
+  for (const ev of dernierParAuteur(evenements, TYPE_STATUT)) {
+    const e = entreeStatut(ev, maintenant);
+    if (e) statuts.push(e);
+  }
+  const demandes: EntreeDemande[] = [];
+  for (const ev of dernierParAuteur(evenements, TYPE_ANNONCE)) {
+    const e = entreeDemande(ev, maintenant);
+    if (e) demandes.push(e);
+  }
+  return { statuts, demandes };
+}
+
+async function murCharge(c: MatrixClient, duree: number): Promise<Room | null> {
+  await rejoindreMur(c);
+  const salon = salonMur(c);
+  if (!salon) return null;
+  await chargerHistorique(c, salon, Date.now() - duree - TOLERANCE_HORLOGE_MS);
+  return salon;
+}
+
+/** Prestataires disponibles sur le Mur : le statut le plus récent de chaque personne, non expiré. */
+export async function lireStatuts(c: MatrixClient): Promise<EntreeStatutMur[]> {
+  const salon = await murCharge(c, DUREE_MAX_ANNONCE_MS);
+  return salon ? instantane(salon, Date.now()).statuts : [];
+}
+
+/** Demandes de clients valables sur le Mur : la plus récente de chaque personne, non expirée. */
+export async function lireDemandes(c: MatrixClient): Promise<EntreeDemande[]> {
+  const salon = await murCharge(c, DUREE_DEMANDE_MS);
+  return salon ? instantane(salon, Date.now()).demandes : [];
+}
+
+const DELAI_REGROUPEMENT_MS = 50;
+
+/**
+ * Appelle `rappel` avec l'état du Mur (statuts + demandes) dès qu'il est lu, puis à chaque changement
+ * (nouvel événement, effacement). `auxErreur` reçoit l'échec de la première lecture (Mur injoignable).
+ * Rend une fonction qui arrête l'écoute.
+ */
+export function ecouterMur(
+  c: MatrixClient,
+  rappel: (mur: InstantaneMur) => void,
+  auxErreur?: (erreur: unknown) => void,
+): () => void {
+  let arrete = false;
+  let minuterie: ReturnType<typeof setTimeout> | null = null;
+  const emettre = (): void => {
+    const salon = salonMur(c) ?? c.getRooms().find((r) => estMur(r)) ?? null;
+    if (salon && !arrete) rappel(instantane(salon, Date.now()));
+  };
+  const prevenir = (_ev: MatrixEvent, salon: Room | undefined): void => {
+    if (arrete || minuterie !== null || !estMur(salon)) return;
+    minuterie = setTimeout(() => {
+      minuterie = null;
+      emettre();
+    }, DELAI_REGROUPEMENT_MS);
+  };
+  c.on(RoomEvent.Timeline, prevenir);
+  c.on(RoomEvent.Redaction, prevenir);
+  murCharge(c, DUREE_MAX_ANNONCE_MS).then(emettre, (erreur: unknown) => auxErreur?.(erreur));
+  return () => {
+    arrete = true;
+    if (minuterie !== null) clearTimeout(minuterie);
+    c.off(RoomEvent.Timeline, prevenir);
+    c.off(RoomEvent.Redaction, prevenir);
+  };
 }
 
 /** Pour les tests : oublie l'identifiant du Mur. */

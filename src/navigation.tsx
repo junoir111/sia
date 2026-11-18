@@ -8,7 +8,11 @@ import { Bientot } from './ecrans/bientot/Bientot';
 import { Bulle } from './ecrans/bulle/Bulle';
 import { Bulles } from './ecrans/bulles/Bulles';
 import { Connexion } from './ecrans/connexion/Connexion';
+import { FicheDemande } from './ecrans/fiche-demande/FicheDemande';
+import { FichePrestataire } from './ecrans/fiche-prestataire/FichePrestataire';
 import { Inscription } from './ecrans/inscription/Inscription';
+import { ListeMetier } from './ecrans/liste-metier/ListeMetier';
+import { Mur } from './ecrans/mur/Mur';
 import { ProfilClient } from './ecrans/profil-client/ProfilClient';
 import { ProfilPrestataire } from './ecrans/profil-prestataire/ProfilPrestataire';
 
@@ -53,7 +57,38 @@ export function RoutesSia() {
           </Garde>
         }
       />
-      <Route path={CHEMINS.mur} element={<Bientot />} />
+      <Route
+        path={CHEMINS.mur}
+        element={
+          <Garde>
+            <Mur />
+          </Garde>
+        }
+      />
+      <Route
+        path={CHEMINS.listeMetier}
+        element={
+          <Garde>
+            <ListeMetier />
+          </Garde>
+        }
+      />
+      <Route
+        path={CHEMINS.fichePrestataire}
+        element={
+          <Garde>
+            <FichePrestataire />
+          </Garde>
+        }
+      />
+      <Route
+        path={CHEMINS.ficheDemande}
+        element={
+          <Garde>
+            <FicheDemande />
+          </Garde>
+        }
+      />
       <Route path="*" element={<Navigate to={CHEMINS.accueil} replace />} />
     </Routes>
   );

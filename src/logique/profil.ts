@@ -188,6 +188,11 @@ function serviceSur(v: unknown): Service | null {
   return prix >= 1 && prix <= LIMITES.prixMax ? { label, prix } : null;
 }
 
+/** Modalité lue sur le réseau : la valeur connue, sinon rien (jamais un refus). */
+export function modaliteSure(brut: unknown): Modalite | undefined {
+  return MODALITES.find((m) => m === brut);
+}
+
 export function nettoyerProfil(inconnu: unknown): ProfilPrestataire | null {
   if (!estObjet(inconnu) || inconnu.version !== 1 || inconnu.role !== 'prestataire') return null;
   const pseudo = texteSur(inconnu.pseudo, LIMITES.pseudo);

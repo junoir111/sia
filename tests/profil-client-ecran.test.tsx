@@ -38,8 +38,27 @@ function afficher() {
         <Route path={CHEMINS.profilClient} element={<ProfilClient />} />
         <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
         <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
+        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
       </Routes>
     </MemoryRouter>,
+  );
+}
+
+/** Demande déjà partie, gardée sur le téléphone (la page reste ouverte dessus). */
+function semerDemande() {
+  localStorage.setItem(
+    'sia.demande',
+    JSON.stringify({
+      eventId: '$demande1',
+      demande: {
+        pseudo: 'palmier-48',
+        service: 'Plombier',
+        zone: 'Akanda',
+        texte: '',
+        budget: 5000,
+        fin: Date.now() + 3_600_000,
+      },
+    }),
   );
 }
 
@@ -79,6 +98,11 @@ describe('Écran Page client (E6)', () => {
     expect(boutonSia()).toBeDisabled();
   });
 
+  it('montre le bouton Se déconnecter', () => {
+    afficher();
+    expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
+  });
+
   it('sans session : retour à l’accueil', () => {
     vi.mocked(lireSession).mockReturnValue(null);
     afficher();
@@ -93,15 +117,14 @@ describe('Écran Page client (E6)', () => {
     expect(budget).toHaveValue('25 000');
   });
 
-  it('publie la demande, puis la retire au second toucher', async () => {
+  it('publie la demande puis arrive sur le Mur', async () => {
     afficher();
     remplir();
     expect(boutonSia()).toBeEnabled();
     const avant = Date.now();
     fireEvent.click(boutonSia());
 
-    expect(await screen.findByText('Ta demande est partie.')).toBeInTheDocument();
-    expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText('écran mur')).toBeInTheDocument();
     const [client, demande] = vi.mocked(publierDemande).mock.calls[0] ?? [];
     expect(client).toBe(CLIENT);
     expect(demande).toMatchObject({
@@ -115,7 +138,11 @@ describe('Écran Page client (E6)', () => {
     expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
       eventId: '$demande1',
     });
+  });
 
+  it('demande déjà partie : un toucher sur SIA la retire', async () => {
+    semerDemande();
+    afficher();
     fireEvent.click(boutonSia());
     expect(await screen.findByText('Ta demande est retirée.')).toBeInTheDocument();
     expect(retirerDemande).toHaveBeenCalledWith(CLIENT, '$demande1');
@@ -123,11 +150,9 @@ describe('Écran Page client (E6)', () => {
     expect(localStorage.getItem('sia.demande')).toBeNull();
   });
 
-  it('offre acceptée dans le bandeau : la page repasse au gris « Tu as choisi. »', async () => {
+  it('offre acceptée dans le bandeau : la page repasse au gris « Tu as choisi. »', () => {
+    semerDemande();
     afficher();
-    remplir();
-    fireEvent.click(boutonSia());
-    await screen.findByText('Ta demande est partie.');
     act(() => signalerChoix());
     expect(screen.getByText('Tu as choisi.')).toBeInTheDocument();
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
@@ -135,15 +160,13 @@ describe('Écran Page client (E6)', () => {
   });
 
   it('demande modifiée après l’envoi : l’ancienne est retirée, la nouvelle publiée', async () => {
+    semerDemande();
     afficher();
-    remplir();
-    fireEvent.click(boutonSia());
-    await screen.findByText('Ta demande est partie.');
     vi.mocked(publierDemande).mockResolvedValue('$demande2');
     fireEvent.change(screen.getByLabelText('Ton budget, en FCFA'), { target: { value: '8000' } });
     expect(screen.getByText('Touche SIA pour envoyer ta nouvelle demande.')).toBeInTheDocument();
     fireEvent.click(boutonSia());
-    expect(await screen.findByText('Ta demande est partie.')).toBeInTheDocument();
+    expect(await screen.findByText('écran mur')).toBeInTheDocument();
     expect(retirerDemande).toHaveBeenCalledWith(CLIENT, '$demande1');
     expect(publierDemande).toHaveBeenLastCalledWith(
       CLIENT,
@@ -164,7 +187,7 @@ describe('Écran Page client (E6)', () => {
     afficher();
     remplir();
     fireEvent.click(boutonSia());
-    await screen.findByText('Ta demande est partie.');
+    await screen.findByText('écran mur');
     expect(enregistrerProfilClient).toHaveBeenCalledWith(SESSION, {
       version: 1,
       role: 'client',

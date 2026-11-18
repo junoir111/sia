@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { CHEMINS, cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { formaterPrix } from '../../logique/profil';
 import { accepterOffre, refuserOffre } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { Bandeau } from '../../ui/Bandeau';
+import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeHorloge, IconeRetour } from '../../ui/icones';
 import { familleErreur } from '../profil-client/branchements';
@@ -17,7 +18,9 @@ const PROBLEME = 'Un problème est survenu. Réessaie.';
 
 /** Petit texte d'état à droite de la ligne, et sa couleur. */
 function etatLigne(b: ResumeBulle): { texte: string; vif: boolean } {
-  if (b.etat === 'invitation-recue') return { texte: 'dit oui', vif: true };
+  if (b.etat === 'invitation-recue') {
+    return { texte: b.invitationDirecte ? 'vous demande' : 'dit oui', vif: true };
+  }
   if (b.etat === 'en-attente') return { texte: 'en attente', vif: false };
   if (b.etat === 'fermee') return { texte: 'fermée', vif: false };
   return b.autreEcrit ? { texte: "en train d'écrire…", vif: true } : { texte: '', vif: false };
@@ -93,7 +96,6 @@ function LigneBulle({ bulle, ouverte, occupee, onToucher, onRepondre }: Propriet
 /** M3 Liste des bulles. */
 export function Bulles() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { client, etat } = useMatrix();
   const bulles = useBulles(client);
   const [choix, setChoix] = useState<string | null>(null);
@@ -101,9 +103,8 @@ export function Bulles() {
   const [bandeau, setBandeau] = useState<string | null>(null);
 
   function retour() {
-    // Arrivé par un lien de l'appli : on revient au profil ; sinon, à l'accueil.
-    if (location.key !== 'default') navigate(-1);
-    else navigate(CHEMINS.accueil);
+    // « Mon compte » vient du Mur : la flèche y ramène toujours (jamais d'impasse).
+    navigate(CHEMINS.mur);
   }
 
   function toucher(b: ResumeBulle) {
@@ -160,6 +161,7 @@ export function Bulles() {
       </p>
       {bandeau && <Bandeau message={bandeau} />}
       {contenu}
+      <BoutonDeconnexion />
     </main>
   );
 }

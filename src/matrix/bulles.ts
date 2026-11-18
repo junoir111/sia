@@ -19,8 +19,8 @@ import {
   type ParticipantBulle,
 } from '../logique/etat-bulle';
 import { avecRef, lireRaison, offresSoeurs, type InvitationRecue } from '../logique/offres';
-import { LIMITES, texteSur } from '../logique/profil';
-import { noterPseudo, pseudoDe } from './annuaire';
+import { LIMITES, contientCaracterePiege, estObjet, texteSur } from '../logique/profil';
+import { pseudoCompatible, pseudoDe } from './annuaire';
 import { dejaAffiche, effacerTout, marquerAffiche } from './ephemere';
 import {
   ALGORITHME_BULLE,
@@ -29,7 +29,13 @@ import {
   TYPE_BULLE,
   type ContenuEtatBulle,
 } from './evenements';
-import { maDemandeValable, oublierDemandeLocale, retirerDemande, trouverDemande } from './mur';
+import {
+  lireStatuts,
+  maDemandeValable,
+  oublierDemandeLocale,
+  retirerDemande,
+  trouverDemande,
+} from './mur';
 
 /*
  * Bulles : salons à 2 personnes, TOUJOURS chiffrés (megolm). On refuse d'y écrire sinon.
@@ -44,6 +50,8 @@ export type ResumeBulle = {
   etat: EtatAffiche;
   nonLus: number;
   autreEcrit: boolean;
+  /** Invitation reçue d'un client qui me demande directement (sans annonce) : « X vous demande ». */
+  invitationDirecte?: boolean;
 };
 
 /** Longueur maximale d'un message (pas fixée par le document 5 : garde-fou contre les envois énormes). */
@@ -54,6 +62,8 @@ const PAS_ATTENTE_MS = 250;
 const DELAI_REGROUPEMENT_MS = 50;
 const FORME_RAISON = /^(.+) \(([^()]+)\) dit oui$/;
 const TYPES_MESSAGE = new Set(['m.room.message', 'm.room.encrypted']);
+/** Invitations « X vous demande » affichées (et acceptables) en même temps : les autres sont quittées sans bruit. */
+export const MAX_INVITATIONS_DIRECTES = 10;
 const DEDANS = new Set<string>([KnownMembership.Join, KnownMembership.Invite]);
 /** Bulles déjà en train d'être quittées sans bruit (évite de relancer leave à chaque rafraîchissement). */
 const enDepart = new Set<string>();
@@ -176,7 +186,160 @@ export async function direOui(
       reason: avecRef(`${presta.pseudo} (${presta.zone}) dit oui`, eventId),
     });
   } catch (erreur) {
-    await c.leave(room_id).catch(() => undefined);
+    await abandonnerBulle(c, room_id, client);
+    throw erreur;
+  }
+  return room_id;
+}
+
+/** Échec après la création : annule l'invitation si elle est partie, puis quitte la bulle (chaque étape tentée). */
+async function abandonnerBulle(c: MatrixClient, roomId: string, invite: string): Promise<void> {
+  await c.kick(roomId, invite, 'annulé').catch(() => undefined);
+  await c.leave(roomId).catch(() => undefined);
+}
+
+const FORME_RAISON_DIRECTE = /^(.+) \(([^()]+)\) vous demande$/;
+const RAISON_DIRECTE_MAX = LIMITES.pseudo + LIMITES.zone + ' () vous demande'.length;
+const ATTENTE_BULLE_MS = 10_000;
+/** Prestataires à qui une demande est en train de partir (évite le double clic). */
+const demandesEnCours = new Set<string>();
+
+type DemandeDirecte = { autreId: string; autre: ParticipantBulle };
+
+/**
+ * Lit une invitation « <pseudo> (<zone>) vous demande » (client qui demande directement, sans
+ * annonce ni référence). Pseudo et zone lisibles, pseudo non pris par un autre compte connu. Sinon null.
+ */
+function lireDemandeDirecte(salon: Room, moiId: string): DemandeDirecte | null {
+  const evMembre = salon.getMember(moiId)?.events.member;
+  const raison: unknown = evMembre?.getContent().reason;
+  if (typeof raison !== 'string' || raison.length > RAISON_DIRECTE_MAX) return null;
+  if (contientCaracterePiege(raison) || raison.includes('[ref:')) return null;
+  const forme = FORME_RAISON_DIRECTE.exec(raison);
+  const pseudo = texteSur(forme?.[1], LIMITES.pseudo);
+  const zone = texteSur(forme?.[2], LIMITES.zone);
+  const autreId = evMembre?.getSender();
+  if (pseudo === null || zone === null || !autreId || autreId === moiId) return null;
+  // Texte libre : le pseudo n'est JAMAIS enregistré ici (seuls le Mur et les statuts réservent un pseudo).
+  return pseudoCompatible(autreId, pseudo) ? { autreId, autre: { pseudo, zone } } : null;
+}
+
+/** Bulle ouverte par « Demander » : sans annonce, à 2 (l'invitant, qui l'a créée, et moi), chiffrée. */
+function bulleDirecteAttendue(salon: Room, moiId: string, directe: DemandeDirecte): boolean {
+  const etat = lireEtat(salon);
+  const verdict = examinerBulle(salon, moiId);
+  return (
+    etat !== null &&
+    etat.demande === null &&
+    verdict.statut === 'saine' &&
+    verdict.autreId === directe.autreId &&
+    verdict.createur === directe.autreId
+  );
+}
+
+async function accepterDemandeDirecte(
+  c: MatrixClient,
+  roomId: string,
+  moiId: string,
+  directe: DemandeDirecte,
+): Promise<void> {
+  await c.joinRoom(roomId);
+  const chiffree = await attendreChiffrement(c, roomId);
+  const rejointe = c.getRoom(roomId);
+  if (rejointe) await chargerMembres(rejointe);
+  if (!chiffree || !rejointe || !bulleDirecteAttendue(rejointe, moiId, directe)) {
+    await c.leave(roomId).catch(() => undefined);
+    throw new Error('Bulle non chiffrée ou invalide : refusée.');
+  }
+}
+
+/** Attend (10 s au plus) que `condition` soit vraie. */
+async function attendre(condition: () => boolean | Promise<boolean>): Promise<boolean> {
+  const limite = Date.now() + ATTENTE_BULLE_MS;
+  for (;;) {
+    if (await condition()) return true;
+    if (Date.now() >= limite) return false;
+    await new Promise((r) => setTimeout(r, PAS_ATTENTE_MS));
+  }
+}
+
+/**
+ * Client : « Demander » à un prestataire, en un clic. Crée une bulle chiffrée à 2 et invite CE SEUL
+ * prestataire (il doit avoir un statut « disponible » valable sur le Mur). Rien de la demande n'est
+ * envoyé : ni budget, ni description (la raison de l'invitation est « <pseudo> (<zone>) vous demande »).
+ * La bulle doit être chiffrée et saine (2 personnes) ; sinon elle est quittée et l'envoi échoue.
+ */
+export async function demanderA(
+  c: MatrixClient,
+  userIdPrestataire: string,
+  moiPublic: ParticipantBulle,
+): Promise<string> {
+  if (demandesEnCours.has(userIdPrestataire)) throw new Error('Demande déjà envoyée.');
+  demandesEnCours.add(userIdPrestataire);
+  try {
+    return await demanderAUneFois(c, userIdPrestataire, moiPublic);
+  } finally {
+    demandesEnCours.delete(userIdPrestataire);
+  }
+}
+
+/** Il existe déjà une bulle ouverte (créée par moi, saine, sans annonce) avec cette personne. */
+function bulleDirecteOuverteAvec(c: MatrixClient, moiId: string, autreId: string): boolean {
+  return c.getRooms().some((salon) => {
+    if (salon.getMyMembership() !== KnownMembership.Join) return false;
+    const etat = lireEtat(salon);
+    if (etat === null || etat.demande !== null) return false;
+    const verdict = examinerBulle(salon, moiId);
+    return verdict.statut === 'saine' && verdict.autreId === autreId && verdict.createur === moiId;
+  });
+}
+
+async function demanderAUneFois(
+  c: MatrixClient,
+  userIdPrestataire: string,
+  moiPublic: ParticipantBulle,
+): Promise<string> {
+  const moiId = moi(c);
+  const client = participantSur(moiPublic);
+  if (userIdPrestataire === moiId) throw new Error('Impossible de se demander à soi-même.');
+  if (bulleDirecteOuverteAvec(c, moiId, userIdPrestataire)) {
+    throw new Error('Demande déjà envoyée : la bulle est encore ouverte.');
+  }
+  const statut = (await lireStatuts(c)).find((s) => s.userId === userIdPrestataire);
+  if (!statut) throw new Error('Prestataire indisponible.');
+  const presta = participantSur({ pseudo: statut.pseudo, zone: statut.zone });
+  // Pas de champ demande : aucune annonce, aucun budget, aucune description dans la bulle.
+  const etat = { participants: { [moiId]: client, [userIdPrestataire]: presta } };
+  if (!nettoyerEtatBulle({ ...etat, demande: DEMANDE_NEUTRE })) throw new Error('Bulle invalide.');
+
+  const { room_id } = await c.createRoom({
+    name: NOM_BULLE,
+    preset: Preset.PrivateChat,
+    visibility: Visibility.Private,
+    // Bulle à 2 : personne d'autre ne peut être invité ; chacun peut effacer les messages (1 min).
+    power_level_content_override: {
+      invite: 100,
+      kick: 100,
+      ban: 100,
+      state_default: 100,
+      events_default: 0,
+      redact: 0,
+    },
+    initial_state: [
+      { type: 'm.room.encryption', state_key: '', content: { algorithm: ALGORITHME_BULLE } },
+      { type: TYPE_BULLE, state_key: '', content: etat },
+    ],
+  });
+  try {
+    await c.invite(room_id, userIdPrestataire, {
+      reason: `${client.pseudo} (${client.zone}) vous demande`,
+    });
+    const sure = await attendre(
+      async () => (await estChiffree(c, room_id)) && bulleSaine(c, room_id),
+    );
+    if (!sure) throw new Error('Bulle non chiffrée ou invalide : demande annulée.');
+  } catch (erreur) {
+    await abandonnerBulle(c, room_id, userIdPrestataire);
     throw erreur;
   }
   return room_id;
@@ -218,7 +381,7 @@ function lireOffre(c: MatrixClient, salon: Room, moiId: string): Offre | null {
   const autreId = evMembre?.getSender();
   if (!raison.ref || pseudo === null || zone === null || !autreId || autreId === moiId) return null;
   const demande = maDemandeValable(c, raison.ref);
-  if (!demande || !noterPseudo(autreId, pseudo)) return null;
+  if (!demande || !pseudoCompatible(autreId, pseudo)) return null;
   return { autreId, ref: raison.ref, autre: { pseudo, zone }, demande };
 }
 
@@ -231,6 +394,14 @@ export async function accepterOffre(c: MatrixClient, roomId: string): Promise<vo
   const salon = salonValide(c, roomId);
   const moiId = moi(c);
   if (salon.getMyMembership() !== KnownMembership.Invite) throw new Error('Offre introuvable.');
+  const directe = lireDemandeDirecte(salon, moiId);
+  if (directe) {
+    if (!invitationsDirectesRetenues(c, moiId).has(roomId)) {
+      await c.leave(roomId).catch(() => undefined);
+      throw new Error('Trop de demandes en attente : refusée.');
+    }
+    return accepterDemandeDirecte(c, roomId, moiId, directe);
+  }
   const offre = lireOffre(c, salon, moiId);
   if (!offre) {
     await c.leave(roomId).catch(() => undefined);
@@ -261,6 +432,7 @@ function bulleAttendue(salon: Room, moiId: string, offre: Offre): boolean {
   const verdict = examinerBulle(salon, moiId);
   return (
     etat !== null &&
+    etat.demande !== null &&
     verdict.statut === 'saine' &&
     verdict.autreId === offre.autreId &&
     verdict.createur === offre.autreId &&
@@ -274,8 +446,19 @@ export async function refuserOffre(c: MatrixClient, roomId: string): Promise<voi
   await c.leave(roomId);
 }
 
-function lireEtat(salon: Room): EtatBulle | null {
-  return nettoyerEtatBulle(salon.currentState.getStateEvents(TYPE_BULLE, '')?.getContent());
+/** État lu d'une bulle : `demande` est null pour une bulle ouverte par « Demander » (pas d'annonce). */
+type EtatLu = { demande: EtatBulle['demande'] | null; participants: EtatBulle['participants'] };
+
+/** Valeurs neutres, jamais rendues : servent seulement à faire valider les participants. */
+const DEMANDE_NEUTRE = { annonce: '$neutre', service: 'x', zone: 'x', budget: 1, texte: '' };
+
+function lireEtat(salon: Room): EtatLu | null {
+  const brut: unknown = salon.currentState.getStateEvents(TYPE_BULLE, '')?.getContent();
+  if (estObjet(brut) && brut.demande === undefined) {
+    const sans = nettoyerEtatBulle({ ...brut, demande: DEMANDE_NEUTRE });
+    return sans ? { demande: null, participants: sans.participants } : null;
+  }
+  return nettoyerEtatBulle(brut);
 }
 
 function nonLus(salon: Room, autreId: string): number {
@@ -343,10 +526,56 @@ export function bulleSaine(c: MatrixClient, roomId: string): boolean {
   return examinerBulle(salon, moiId).statut === 'saine';
 }
 
-function resumeInvitation(c: MatrixClient, salon: Room, moiId: string): ResumeBulle | null {
+/** Vrai si l'invitant a déjà quitté la bulle (invitation morte). */
+function invitantParti(salon: Room, autreId: string): boolean {
+  const appartenance = salon.getMember(autreId)?.membership;
+  return appartenance === KnownMembership.Leave || appartenance === KnownMembership.Ban;
+}
+
+/**
+ * Invitations « X vous demande » à garder : valables, invitant encore là, les plus récentes
+ * d'abord, MAX_INVITATIONS_DIRECTES au plus. Les surnuméraires et les mortes sont quittées sans bruit.
+ */
+function invitationsDirectesRetenues(c: MatrixClient, moiId: string): Set<string> {
+  const retenues = new Set<string>();
+  const invitations = c
+    .getRooms()
+    .filter((r) => r.getMyMembership() === KnownMembership.Invite)
+    .sort((a, b) => b.getLastActiveTimestamp() - a.getLastActiveTimestamp());
+  for (const salon of invitations) {
+    const directe = lireDemandeDirecte(salon, moiId);
+    if (!directe) continue;
+    if (invitantParti(salon, directe.autreId) || retenues.size >= MAX_INVITATIONS_DIRECTES) {
+      quitterSansBruit(c, salon.roomId);
+    } else {
+      retenues.add(salon.roomId);
+    }
+  }
+  return retenues;
+}
+
+function resumeInvitation(
+  c: MatrixClient,
+  salon: Room,
+  moiId: string,
+  retenues: ReadonlySet<string>,
+): ResumeBulle | null {
+  const directe = lireDemandeDirecte(salon, moiId);
+  if (directe) {
+    if (!retenues.has(salon.roomId)) return null;
+    return {
+      roomId: salon.roomId,
+      autre: directe.autre,
+      demande: null,
+      etat: 'invitation-recue',
+      nonLus: 0,
+      autreEcrit: false,
+      invitationDirecte: true,
+    };
+  }
   const offre = lireOffre(c, salon, moiId);
-  if (!offre) {
-    // Offre qui ne répond pas à MA demande encore valable : refusée sans bruit.
+  if (!offre || invitantParti(salon, offre.autreId)) {
+    // Offre qui ne répond pas à MA demande encore valable (ou dont l'auteur est parti) : refusée sans bruit.
     quitterSansBruit(c, salon.roomId);
     return null;
   }
@@ -372,11 +601,11 @@ function resumeInvitation(c: MatrixClient, salon: Room, moiId: string): ResumeBu
   };
 }
 
-/** Pseudo de l'autre : celui de l'annuaire pour son vrai compte ; null si son pseudo est usurpé. */
+/** Pseudo de l'autre : celui de l'annuaire pour son vrai compte ; sinon le déclaré s'il n'est pas pris (rien n'est enregistré) ; null si usurpé. */
 function autreAffiche(autreId: string, declare: ParticipantBulle): ParticipantBulle | null {
   const connu = pseudoDe(autreId);
   if (connu !== null) return { pseudo: connu, zone: declare.zone };
-  return noterPseudo(autreId, declare.pseudo) ? declare : null;
+  return pseudoCompatible(autreId, declare.pseudo) ? declare : null;
 }
 
 function resumeBulle(c: MatrixClient, salon: Room, moiId: string): ResumeBulle | null {
@@ -415,12 +644,13 @@ function resumeBulle(c: MatrixClient, salon: Room, moiId: string): ResumeBulle |
 export function listerBulles(c: MatrixClient): ResumeBulle[] {
   const moiId = c.getUserId();
   if (!moiId) return [];
+  const retenues = invitationsDirectesRetenues(c, moiId);
   return c
     .getRooms()
     .map((salon) => {
       const appartenance = salon.getMyMembership();
       if (appartenance === KnownMembership.Invite)
-        return { salon, r: resumeInvitation(c, salon, moiId) };
+        return { salon, r: resumeInvitation(c, salon, moiId, retenues) };
       if (appartenance === KnownMembership.Join) return { salon, r: resumeBulle(c, salon, moiId) };
       return { salon, r: null };
     })

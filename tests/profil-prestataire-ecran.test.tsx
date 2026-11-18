@@ -47,6 +47,7 @@ function afficher() {
         <Route path={CHEMINS.profilPrestataire} element={<ProfilPrestataire />} />
         <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
         <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
+        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -91,6 +92,11 @@ describe('Écran Profil prestataire (E5)', () => {
     expect(boutonSia()).toBeDisabled();
   });
 
+  it('montre le bouton Se déconnecter', () => {
+    afficher();
+    expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
+  });
+
   it('sans session : retour à l’accueil', () => {
     vi.mocked(lireSession).mockReturnValue(null);
     afficher();
@@ -111,7 +117,7 @@ describe('Écran Profil prestataire (E5)', () => {
     expect(screen.queryByRole('option')).not.toBeInTheDocument();
   });
 
-  it('enregistrement réussi : bouton vert et phrase, puis éteint au second toucher', async () => {
+  it('enregistrement réussi : le statut est publié, puis on arrive sur le Mur', async () => {
     vi.mocked(enregistrerProfil).mockResolvedValue({ ok: true });
     afficher();
     await attendreChargement();
@@ -119,8 +125,7 @@ describe('Écran Profil prestataire (E5)', () => {
     expect(boutonSia()).toBeEnabled();
     fireEvent.click(boutonSia());
 
-    expect(await screen.findByText('Tu es visible à Akanda.')).toBeInTheDocument();
-    expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText('écran mur')).toBeInTheDocument();
     expect(ecrireDisponible).toHaveBeenCalledWith(true);
     expect(enregistrerProfil).toHaveBeenCalledWith(SESSION, {
       version: 1,
@@ -131,20 +136,37 @@ describe('Écran Profil prestataire (E5)', () => {
       modalite: 'deplace',
       services: [{ label: 'Réparer une fuite', prix: 5000 }],
     });
-
-    fireEvent.change(screen.getByLabelText('Service 2'), {
-      target: { value: 'Déboucher un évier' },
-    });
-    expect(screen.getByText('Touche SIA pour enregistrer.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Service 2'), { target: { value: '' } });
-    fireEvent.click(boutonSia());
-    expect(await screen.findByText('Tu es visible à Akanda.')).toBeInTheDocument();
-
     const [client, statut] = vi.mocked(publierStatut).mock.calls[0] ?? [];
     expect(client).toBe(CLIENT);
-    expect(statut).toMatchObject({ pseudo: 'mangue-douce', metier: 'Plombier', zone: 'Akanda' });
+    expect(statut).toMatchObject({
+      pseudo: 'mangue-douce',
+      metier: 'Plombier',
+      zone: 'Akanda',
+      modalite: 'deplace',
+      services: [{ label: 'Réparer une fuite', prix: 5000 }],
+    });
     expect(statut?.fin).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+  });
 
+  it('déjà visible : un toucher sur SIA éteint, sans quitter la page', async () => {
+    vi.mocked(lireProfil).mockResolvedValue({
+      ok: true,
+      profil: {
+        version: 1,
+        role: 'prestataire',
+        pseudo: 'mangue',
+        metier: 'Plombier',
+        zone: 'Owendo',
+        modalite: 'deplace',
+        services: [],
+      },
+    });
+    vi.mocked(monStatutActif).mockReturnValue({
+      eventId: '$statut',
+      statut: { pseudo: 'mangue', metier: 'Plombier', zone: 'Owendo', fin: Date.now() + 60_000 },
+    });
+    afficher();
+    await screen.findByText('Tu es visible à Owendo.');
     fireEvent.click(boutonSia());
     expect(await screen.findByText("Tu n'es plus visible.")).toBeInTheDocument();
     expect(retirerStatut).toHaveBeenCalledWith(CLIENT);
