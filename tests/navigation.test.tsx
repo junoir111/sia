@@ -14,6 +14,7 @@ vi.mock('../src/matrix/profil', () => ({
   lireProfil: vi.fn().mockResolvedValue({ ok: true, profil: null }),
   lireProfilClient: vi.fn().mockResolvedValue({ ok: true, profil: null }),
   enregistrerProfil: vi.fn(),
+  lirePseudoEnregistre: vi.fn().mockResolvedValue(null),
 }));
 
 function afficher(adresse: string) {

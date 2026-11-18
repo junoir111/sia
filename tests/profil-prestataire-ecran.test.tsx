@@ -10,7 +10,11 @@ import { lireSession } from '../src/matrix/session';
 import { ecrireDisponible, lireDisponible } from '../src/appareil/disponible';
 
 // Jamais le vrai serveur ni le vrai stockage : tout est simulé.
-vi.mock('../src/matrix/profil', () => ({ lireProfil: vi.fn(), enregistrerProfil: vi.fn() }));
+vi.mock('../src/matrix/profil', () => ({
+  lireProfil: vi.fn(),
+  enregistrerProfil: vi.fn(),
+  lirePseudoEnregistre: vi.fn(() => Promise.resolve(null)),
+}));
 vi.mock('../src/matrix/session', () => ({ lireSession: vi.fn() }));
 vi.mock('../src/coquille/FournisseurMatrix', () => ({ useMatrix: vi.fn() }));
 vi.mock('../src/matrix/mur', () => ({

@@ -17,6 +17,7 @@ vi.mock('../src/coquille/FournisseurMatrix', () => ({ useMatrix: vi.fn() }));
 vi.mock('../src/matrix/profil', () => ({
   lireProfilClient: vi.fn(),
   enregistrerProfilClient: vi.fn(),
+  lirePseudoEnregistre: vi.fn(() => Promise.resolve(null)),
 }));
 vi.mock('../src/matrix/bulles', () => ({
   ecouterBulles: vi.fn(() => () => undefined),

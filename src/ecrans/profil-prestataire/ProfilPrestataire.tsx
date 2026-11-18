@@ -19,7 +19,7 @@ import type {
   SaisieProfil,
 } from '../../logique/profil';
 import { monStatutActif, publierStatut, retirerStatut } from '../../matrix/mur';
-import { enregistrerProfil, lireProfil } from '../../matrix/profil';
+import { enregistrerProfil, lireProfil, lirePseudoEnregistre } from '../../matrix/profil';
 import type { ErreurProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { ecrireDisponible, lireDisponible } from '../../appareil/disponible';
@@ -123,7 +123,15 @@ export function ProfilPrestataire() {
           else setBandeau(MESSAGES[resultat.erreur]);
           return;
         }
-        if (!resultat.profil) return;
+        if (!resultat.profil) {
+          // Pas de profil prestataire : on reprend le pseudo déjà choisi (par exemple en client).
+          lirePseudoEnregistre(session)
+            .then((pseudo) => {
+              if (actif && pseudo) setSaisie((avant) => ({ ...avant, pseudo }));
+            })
+            .catch(() => undefined);
+          return;
+        }
         setSaisie(saisieDepuis(resultat.profil));
         if (lireDisponible()) setZoneSecours(resultat.profil.zone);
       });

@@ -120,3 +120,10 @@ export async function enregistrerProfilClient(
   if (reponse.statut === 200) return { ok: true };
   return { ok: false, erreur: traduireErreur(reponse) };
 }
+
+/** Pseudo déjà enregistré, quel que soit le rôle (pour le reprendre en changeant de rôle). Rien -> null. */
+export async function lirePseudoEnregistre(session: Session): Promise<string | null> {
+  const reponse = await envoyer(session, 'GET');
+  if (reponse === 'reseau' || reponse.statut !== 200) return null;
+  return nettoyerProfil(reponse.corps)?.pseudo ?? nettoyerProfilClient(reponse.corps)?.pseudo ?? null;
+}

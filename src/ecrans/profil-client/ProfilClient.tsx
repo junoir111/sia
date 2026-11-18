@@ -11,7 +11,7 @@ import type { SaisieProfilClient as SaisieClient } from '../../logique/profil-cl
 import { LIMITES, formaterPrix, lirePrix, pseudoPropose } from '../../logique/profil';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { publierDemande, retirerDemande } from '../../matrix/mur';
-import { enregistrerProfilClient, lireProfilClient } from '../../matrix/profil';
+import { enregistrerProfilClient, lireProfilClient, lirePseudoEnregistre } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { AccesBulles } from '../../ui/AccesBulles';
 import { Bandeau } from '../../ui/Bandeau';
@@ -120,7 +120,16 @@ export function ProfilClient() {
           return;
         }
         const profil = lu.profil;
-        if (profil) setSaisie((avant) => ({ ...avant, pseudo: profil.pseudo, zone: profil.zone }));
+        if (profil) {
+          setSaisie((avant) => ({ ...avant, pseudo: profil.pseudo, zone: profil.zone }));
+          return;
+        }
+        // Pas de profil client : on reprend le pseudo déjà choisi (par exemple en prestataire).
+        lirePseudoEnregistre(session)
+          .then((pseudo) => {
+            if (actif && pseudo) setSaisie((avant) => ({ ...avant, pseudo }));
+          })
+          .catch(() => undefined);
       })
       .catch(() => undefined); // Profil illisible : on garde le pseudo proposé.
     return () => {
