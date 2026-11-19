@@ -170,6 +170,13 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
     expect(accepterOffre).toHaveBeenCalledWith(CLIENT, '!o:sia');
   });
 
+  it('invitation directe (« Demander ») : le bandeau dit « vous demande », pas « dit oui »', () => {
+    afficher();
+    act(() => bullesChangent([{ ...offre('!d:sia', 'mangue-douce'), invitationDirecte: true }]));
+    expect(screen.getByText('mangue-douce (Owendo) vous demande')).toBeInTheDocument();
+    expect(screen.queryByText(/dit oui/)).not.toBeInTheDocument();
+  });
+
   it('client : Oui prévient la page client que le choix est fait', async () => {
     const surChoix = vi.fn();
     window.addEventListener('sia:choisi', surChoix);

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { lireDisponible } from '../../appareil/disponible';
 import { texteBandeau } from '../../logique/demande';
 import { doitNotifier } from '../../logique/notification';
 import type { ParticipantBulle } from '../../logique/etat-bulle';
-import { accepterOffre, direOui, ecouterBulles, refuserOffre } from '../../matrix/bulles';
+import { accepterOffre, direOui, refuserOffre } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { demandesActives, ecouterDemandes, monStatutActif } from '../../matrix/mur';
 import type { DemandeRecue } from '../../matrix/mur';
@@ -15,24 +15,30 @@ import { lireProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { useGlisse } from '../../ui/useGlisse';
 import { familleErreur } from '../profil-client/branchements';
+import { cleCarte, salonDeAdresse } from './alertes-bulles';
+import type { CarteBulle } from './alertes-bulles';
 import { CarteAlerte } from './CarteAlerte';
 import type { VueAlerte } from './CarteAlerte';
 import { commencerReponse, enFile, finirReponse, rater } from './reponses';
 import { EVENEMENT_DISPONIBLE, signalerChoix } from './signal';
+import { useAlertesBulles } from './useAlertesBulles';
 import { ajouterVue, lireVues } from './vues';
 import './bandeau.css';
 
 /*
  * Bandeaux M1 / M2, posés au-dessus de tout écran (appli ouverte seulement) :
  * - prestataire disponible : une demande de client arrive → « D'accord ? » Non / Oui ;
- * - client : un prestataire a dit oui → « Tu veux discuter ? » Non / Oui.
+ * - client : un prestataire a dit oui → « Tu veux discuter ? » Non / Oui ;
+ * - ma bulle s'ouvre (« X a accepté. ») ou un message arrive dans une bulle où je ne suis pas
+ *   (« Nouveau message de X », jamais son texte) → un seul bouton « Ouvrir » (alertes-bulles.ts).
  * Les alertes s'empilent : la plus récente en haut, trois au plus à la fois ; les autres attendent.
- * Un toucher change la carte tout de suite (« Réponse envoyée… ») ; elle s'en va quand le serveur confirme.
+ * Un toucher Oui / Non change la carte tout de suite (« Réponse envoyée… ») ; elle s'en va quand le serveur confirme.
  */
 
 type Alerte =
   | { type: 'demande'; cle: string; demande: DemandeRecue }
-  | { type: 'offre'; cle: string; bulle: ResumeBulle };
+  | { type: 'offre'; cle: string; bulle: ResumeBulle }
+  | { type: 'carte'; cle: string; carte: CarteBulle };
 
 /** Alertes montrées en même temps. */
 const NB_VISIBLES = 3;
@@ -61,18 +67,52 @@ function vueDe(a: Alerte): VueAlerte {
       question: "D'accord ?",
     };
   }
+  if (a.type === 'carte') {
+    const { genre, pseudo } = a.carte;
+    return genre === 'ouverte'
+      ? { cle: a.cle, nom: 'Bulle ouverte', ligne: `${pseudo} a accepté.` }
+      : { cle: a.cle, nom: 'Nouveau message', ligne: `Nouveau message de ${pseudo}` };
+  }
   const { pseudo, zone } = a.bulle.autre;
+  const direct = a.bulle.invitationDirecte === true;
   return {
     cle: a.cle,
-    nom: 'Nouvelle offre',
-    ligne: `${pseudo} (${zone}) dit oui`,
+    nom: direct ? 'Nouvelle demande directe' : 'Nouvelle offre',
+    ligne: `${pseudo} (${zone}) ${direct ? 'vous demande' : 'dit oui'}`,
     question: 'Tu veux discuter ?',
   };
+}
+
+/**
+ * Remet à jour les alertes d'UN type d'après la liste de celles qui doivent exister : celles qui ne sont
+ * plus voulues s'en vont, les nouvelles arrivent en fin de file (donc en haut de la pile). Les autres types
+ * ne bougent pas : une demande a sa propre vie, une offre ne dépend que d'une vraie liste de bulles.
+ */
+function remplacerType(file: Alerte[], type: Alerte['type'], voulues: Alerte[]): Alerte[] {
+  const cles = new Set(voulues.map((a) => a.cle));
+  const gardees = file.filter((a) => a.type !== type || cles.has(a.cle));
+  const presentes = new Set(gardees.map((a) => a.cle));
+  const nouvelles = voulues.filter((a) => !presentes.has(a.cle));
+  return nouvelles.length === 0 && gardees.length === file.length
+    ? file
+    : [...gardees, ...nouvelles];
+}
+
+function alertesOffres(offres: ResumeBulle[]): Alerte[] {
+  return offres.map((bulle) => ({ type: 'offre', cle: bulle.roomId, bulle }));
+}
+
+/** La bulle la plus active (la première de la liste) arrive en dernier : elle se retrouve en haut de la pile. */
+function alertesCartes(cartes: CarteBulle[]): Alerte[] {
+  return cartes.map((carte): Alerte => ({ type: 'carte', cle: cleCarte(carte), carte })).reverse();
 }
 
 export function Bandeau() {
   const { client } = useMatrix();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // La bulle affichée à l'écran : on n'y alerte pas de ce qui s'y passe, on y est.
+  const ouverte = salonDeAdresse(pathname);
   // Dans l'ordre d'arrivée : la plus récente est la dernière.
   const [file, setFile] = useState<Alerte[]>([]);
   const vues = useRef<Set<string> | null>(null);
@@ -121,21 +161,11 @@ export function Bandeau() {
     };
   }, [client, dejaVues, retirer]);
 
-  // Client : offres reçues (invitations dans une bulle).
-  useEffect(() => {
-    if (!client) return;
-    return ecouterBulles(client, (bulles) => {
-      const offres = bulles.filter((b) => b.etat === 'invitation-recue');
-      const encore = new Set(offres.map((b) => b.roomId));
-      setFile((f) => {
-        const gardes = f.filter((x) => x.type === 'demande' || encore.has(x.cle));
-        const nouvelles: Alerte[] = offres
-          .filter((b) => !gardes.some((x) => x.cle === b.roomId))
-          .map((b) => ({ type: 'offre', cle: b.roomId, bulle: b }));
-        return nouvelles.length === 0 && gardes.length === f.length ? f : [...gardes, ...nouvelles];
-      });
-    });
-  }, [client]);
+  // Bulles : offres reçues (invitations), « X a accepté. » et « Nouveau message de X ».
+  useAlertesBulles(client, ouverte, {
+    offres: (offres) => setFile((f) => remplacerType(f, 'offre', alertesOffres(offres))),
+    cartes: (cartes) => setFile((f) => remplacerType(f, 'carte', alertesCartes(cartes))),
+  });
 
   // Une vibration courte quand une nouvelle alerte arrive (sans texte hors de l'appli).
   useEffect(() => {
@@ -152,7 +182,13 @@ export function Bandeau() {
   if (!client) return null;
   const c = client;
 
-  async function repondre(alerte: Alerte, oui: boolean): Promise<void> {
+  /** Un seul bouton « Ouvrir » : la carte s'en va tout de suite (avec l'autre carte de la même bulle) et on entre. */
+  function ouvrir(carte: CarteBulle): void {
+    setFile((f) => f.filter((x) => x.type !== 'carte' || x.carte.roomId !== carte.roomId));
+    navigate(cheminBulle(carte.roomId));
+  }
+
+  async function repondre(alerte: Exclude<Alerte, { type: 'carte' }>, oui: boolean): Promise<void> {
     const { cle } = alerte;
     if (alerte.type === 'demande' && !oui) {
       // « Non » à une demande : rien à envoyer. La carte s'en va tout de suite et ne revient jamais.
@@ -196,7 +232,16 @@ export function Bandeau() {
   return (
     <div className="notif" ref={pile} aria-live="polite" aria-relevant="additions">
       {visibles.map((a) => (
-        <CarteAlerte key={a.cle} vue={vueDe(a)} onRepondre={(oui) => void repondre(a, oui)} />
+        <CarteAlerte
+          key={a.cle}
+          vue={vueDe(a)}
+          onRepondre={(oui) => {
+            if (a.type !== 'carte') void repondre(a, oui);
+          }}
+          onOuvrir={() => {
+            if (a.type === 'carte') ouvrir(a.carte);
+          }}
+        />
       ))}
     </div>
   );

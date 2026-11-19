@@ -59,6 +59,10 @@ describe('deconnecter : effacements en attente', () => {
     );
     localStorage.setItem('sia.annuaire', '[]');
     localStorage.setItem('sia.appareils', '{}');
+    localStorage.setItem(
+      'sia.alertes',
+      JSON.stringify({ ouvertures: { [BULLE]: 'attente' }, messages: { [BULLE]: 2 } }),
+    );
 
     await deconnecter(SESSION);
 
@@ -66,6 +70,8 @@ describe('deconnecter : effacements en attente', () => {
     expect(localStorage.getItem('sia.a-effacer')).toBeNull();
     expect(localStorage.getItem('sia.annuaire')).toBeNull();
     expect(localStorage.getItem('sia.appareils')).toBeNull();
+    // Mémoire des alertes de bulle : rien ne reste pour le prochain compte de ce téléphone.
+    expect(localStorage.getItem('sia.alertes')).toBeNull();
   });
 
   it('n’attend pas plus de 10 s un serveur muet', async () => {
