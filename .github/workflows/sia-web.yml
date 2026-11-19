@@ -1,0 +1,43 @@
+# SIA - fabrique la VERSION WEB et la publie sur GitHub Pages (gratuit) : https://junoir111.github.io/sia/
+# Déclenché à chaque envoi sur la branche main (ou à la main). Aucune clé ici : le site est public, il ne contient
+# que le code de l'appli (déjà public, licence AGPL) et l'adresse du serveur. Les comptes et les messages restent
+# sur le serveur de la maison ; les clés de chiffrement restent dans le navigateur de chaque personne.
+name: sia-web
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run web
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-web
+  publier:
+    needs: construire
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v4

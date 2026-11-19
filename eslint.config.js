@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'floorplan', 'android'] },
+  { ignores: ['dist', 'dist-web', 'node_modules', 'floorplan', 'android'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {

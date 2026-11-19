@@ -14,7 +14,9 @@
     "verifier": "tsc --noEmit && eslint . && vitest run",
     "format": "prettier --write .",
     "essai-reel": "vitest run --config essais-reels/vitest.config.ts",
-    "android": "npm run build && cap sync android"
+    "android": "npm run build && cap sync android",
+    "web": "tsc --noEmit && vite build --base=./ --outDir dist-web",
+    "apercu-web": "vite preview --outDir dist-web --base /sia/ --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
     "@capacitor/core": "8.6.2",
