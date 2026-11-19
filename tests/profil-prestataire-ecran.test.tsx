@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
 import { oublierReponses } from '../src/ecrans/bandeau/reponses';
+import { deposerEchec, oublierEchec } from '../src/ecrans/profil-prestataire/echec-mise-en-ligne';
 import { ProfilPrestataire } from '../src/ecrans/profil-prestataire/ProfilPrestataire';
 import { useMatrix } from '../src/coquille/FournisseurMatrix';
 import { monStatutActif, publierStatut, retirerStatut } from '../src/matrix/mur';
@@ -93,6 +94,7 @@ function remplir() {
 describe('Écran Profil prestataire (E5)', () => {
   beforeEach(() => {
     oublierReponses();
+    oublierEchec();
     vi.mocked(lireSession).mockReturnValue(SESSION);
     vi.mocked(lireProfil).mockReset().mockResolvedValue({ ok: true, profil: null });
     vi.mocked(enregistrerProfil).mockReset();
@@ -355,6 +357,37 @@ describe('Écran Profil prestataire (E5)', () => {
       expect(screen.getByLabelText('Service 1')).toHaveValue('Réparer une fuite');
       expect(publierStatut).not.toHaveBeenCalled();
       expect(ecrireDisponible).not.toHaveBeenCalled();
+    });
+
+    it('un refus déposé pendant que la page est ouverte (refus très rapide) : le message et ce qui était tapé sont repris tout de suite', async () => {
+      afficher();
+      await attendreChargement();
+      remplir();
+      act(() =>
+        deposerEchec({
+          message: 'Pas de connexion. Réessaie dans un instant.',
+          saisie: {
+            pseudo: 'mangue-douce',
+            metier: 'Maçon',
+            zone: 'Owendo',
+            recoit: true,
+            deplace: false,
+            services: [
+              { label: 'Monter un mur', prix: '20 000' },
+              { label: '', prix: '' },
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Pas de connexion. Réessaie dans un instant.',
+      );
+      expect(screen.getByText('Maçon')).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Owendo');
+      expect(screen.getByLabelText('Service 1')).toHaveValue('Monter un mur');
+      expect(boutonSia()).toBeEnabled();
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('la publication sur le Mur est refusée : retour au profil, puis on peut réessayer', async () => {

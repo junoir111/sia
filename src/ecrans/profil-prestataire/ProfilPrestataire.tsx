@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { CHEMINS, cheminMur } from '../../chemins';
 import { DUREE_MAX_ANNONCE_MS } from '../../config';
@@ -41,6 +41,7 @@ import { signalerDisponible } from '../bandeau/signal';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { memoriserMoi } from '../mur/useMoi';
 import { familleErreur } from '../profil-client/branchements';
+import { deposerEchec, ecouterEchec, reprendreEchec } from './echec-mise-en-ligne';
 import './profil-prestataire.css';
 
 const NB_LIGNES_SERVICE = 2;
@@ -60,20 +61,6 @@ function saisieDepuis(profil: Profil): SaisieProfil {
     ...choixDepuisModalite(profil.modalite),
     services: [...lignes, ...LIGNES_VIDES].slice(0, Math.max(NB_LIGNES_SERVICE, lignes.length)),
   };
-}
-
-/** Ce qu'on rapporte au profil quand le serveur a refusé la mise en ligne : le message et ce qui était tapé. */
-type Echec = { message: string; saisie: SaisieProfil };
-
-/** Relit l'échec passé dans l'état de navigation (inconnu au départ : on vérifie sa forme). */
-function echecDepuis(etat: unknown): Echec | null {
-  if (typeof etat !== 'object' || etat === null || !('echec' in etat)) return null;
-  const { echec } = etat;
-  if (typeof echec !== 'object' || echec === null) return null;
-  const { message, saisie } = echec as Partial<Echec>;
-  return typeof message === 'string' && typeof saisie === 'object' && saisie !== null
-    ? { message, saisie }
-    : null;
 }
 
 function exigerClient(client: MatrixClient | null): MatrixClient {
@@ -125,25 +112,19 @@ async function mettreEnLigne(
 /** E5 Profil prestataire (modèle 3 « Pseudo en titre »). */
 export function ProfilPrestataire() {
   const navigate = useNavigate();
-  const { state } = useLocation();
   const { client } = useMatrix();
   const bulles = useBulles(client);
   const [session] = useState(lireSession);
-  // On revient ici parce que le serveur a refusé : ce qui était tapé est rendu tel quel, avec le message.
-  const [echec] = useState(() => echecDepuis(state));
-  const [saisie, setSaisie] = useState<SaisieProfil>(
-    () =>
-      echec?.saisie ?? {
-        pseudo: session ? pseudoPropose(session.userId) : '',
-        metier: '',
-        zone: '',
-        recoit: false,
-        deplace: false,
-        services: LIGNES_VIDES,
-      },
-  );
+  const [saisie, setSaisie] = useState<SaisieProfil>(() => ({
+    pseudo: session ? pseudoPropose(session.userId) : '',
+    metier: '',
+    zone: '',
+    recoit: false,
+    deplace: false,
+    services: LIGNES_VIDES,
+  }));
   const [erreurs, setErreurs] = useState<ErreursProfil>({});
-  const [bandeau, setBandeau] = useState<string | null>(echec?.message ?? null);
+  const [bandeau, setBandeau] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
   // undefined : pas encore touché SIA ici ; l'état vient alors du Mur (ou du téléphone en secours).
   const [choixVisible, setVisibleA] = useState<string | null | undefined>(undefined);
@@ -151,7 +132,7 @@ export function ProfilPrestataire() {
   // on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
   const [attendu, setAttendu] = useState<{ visibleA: string | null } | null>(null);
   const [zoneSecours, setZoneSecours] = useState<string | null>(null);
-  const [modifie, setModifie] = useState(echec !== null);
+  const [modifie, setModifie] = useState(false);
   const [eteint, setEteint] = useState(false);
   const [edition, setEdition] = useState(false);
   const [focus, setFocus] = useState<'pseudo' | 'metier' | null>(null);
@@ -159,6 +140,23 @@ export function ProfilPrestataire() {
   const [photoOccupee, setPhotoOccupee] = useState(false);
   const champPseudo = useRef<HTMLInputElement>(null);
   const idPhrase = useId();
+  // Vrai dès que ce qui était tapé a été repris d'un refus du serveur : la copie du serveur ne doit pas l'écraser.
+  const repris = useRef(false);
+
+  // Le serveur a refusé la mise en ligne : ce qui était tapé revient tel quel, avec le message. Le refus peut
+  // être arrivé avant l'ouverture de la page, ou arriver pendant qu'elle est ouverte (refus très rapide).
+  useEffect(() => {
+    const reprendre = () => {
+      const echec = reprendreEchec();
+      if (!echec) return;
+      repris.current = true;
+      setSaisie(echec.saisie);
+      setBandeau(echec.message);
+      setModifie(true);
+    };
+    reprendre();
+    return ecouterEchec(reprendre);
+  }, []);
 
   const urlPhoto = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(
@@ -188,28 +186,23 @@ export function ProfilPrestataire() {
           // Pas de profil prestataire : on reprend le pseudo déjà choisi (par exemple en client).
           lirePseudoEnregistre(session)
             .then((pseudo) => {
-              if (actif && pseudo && !echec) setSaisie((avant) => ({ ...avant, pseudo }));
+              if (actif && pseudo && !repris.current) setSaisie((avant) => ({ ...avant, pseudo }));
             })
             .catch(() => undefined);
           return;
         }
-        // Retour après un refus : on garde ce qui était tapé, pas la copie du serveur.
-        if (!echec) setSaisie(saisieDepuis(resultat.profil));
+        // Après un refus : on garde ce qui était tapé, pas la copie du serveur.
+        if (!repris.current) setSaisie(saisieDepuis(resultat.profil));
         if (lireDisponible()) setZoneSecours(resultat.profil.zone);
       });
     return () => {
       actif = false;
     };
-  }, [session, navigate, echec]);
+  }, [session, navigate]);
 
   useEffect(() => {
     if (edition) champPseudo.current?.focus();
   }, [edition]);
-
-  // L'échec est lu : on le retire de l'historique, pour qu'un retour arrière ne ramène pas un vieux message.
-  useEffect(() => {
-    if (echec) navigate(CHEMINS.profilPrestataire, { replace: true, state: null });
-  }, [echec, navigate]);
 
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
@@ -283,11 +276,12 @@ export function ProfilPrestataire() {
     navigate(cheminMur());
     const erreur = await enFile(() => mettreEnLigne(session, client, verifie.profil));
     if (erreur === null) return;
-    if (erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
-    else
-      navigate(CHEMINS.profilPrestataire, {
-        state: { echec: { message: MESSAGES[erreur], saisie } },
-      });
+    if (erreur === 'session') {
+      navigate(CHEMINS.accueil, { replace: true });
+      return;
+    }
+    deposerEchec({ message: MESSAGES[erreur], saisie });
+    navigate(CHEMINS.profilPrestataire);
   }
 
   async function choisirPhoto(fichier: File) {
