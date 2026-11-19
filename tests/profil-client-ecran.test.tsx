@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
+import { oublierReponses } from '../src/ecrans/bandeau/reponses';
 import { oublierChoix, signalerChoix } from '../src/ecrans/bandeau/signal';
+import { deposerEchec, oublierEchec } from '../src/ecrans/profil-client/echec-publication';
 import { ProfilClient } from '../src/ecrans/profil-client/ProfilClient';
 import { useMatrix } from '../src/coquille/FournisseurMatrix';
 import { listerBulles } from '../src/matrix/bulles';
@@ -40,7 +42,15 @@ function afficher() {
         <Route path={CHEMINS.profilClient} element={<ProfilClient />} />
         <Route path={CHEMINS.accueil} element={<p>écran accueil</p>} />
         <Route path={CHEMINS.bulles} element={<p>écran bulles</p>} />
-        <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
+        <Route
+          path={CHEMINS.mur}
+          element={
+            <>
+              <p>écran mur</p>
+              <Link to={CHEMINS.bulles}>Aller aux bulles</Link>
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -82,6 +92,9 @@ function remplir() {
 describe('Écran Page client (E6)', () => {
   beforeEach(() => {
     localStorage.clear();
+    oublierReponses();
+    oublierEchec();
+    oublierChoix();
     vi.mocked(lireSession).mockReturnValue(SESSION);
     vi.mocked(useMatrix).mockReturnValue({ client: CLIENT, etat: 'pret' });
     vi.mocked(listerBulles).mockReturnValue([]);
@@ -127,6 +140,7 @@ describe('Écran Page client (E6)', () => {
     fireEvent.click(boutonSia());
 
     expect(await screen.findByText('écran mur')).toBeInTheDocument();
+    await waitFor(() => expect(publierDemande).toHaveBeenCalled());
     const [client, demande] = vi.mocked(publierDemande).mock.calls[0] ?? [];
     expect(client).toBe(CLIENT);
     expect(demande).toMatchObject({
@@ -137,9 +151,11 @@ describe('Écran Page client (E6)', () => {
       texte: "Fuite sous l'évier, ce soir",
     });
     expect(demande?.fin).toBeGreaterThanOrEqual(avant + 7_200_000);
-    expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
-      eventId: '$demande1',
-    });
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
+        eventId: '$demande1',
+      }),
+    );
   });
 
   it('demande déjà partie : un toucher sur SIA la retire', async () => {
@@ -169,6 +185,7 @@ describe('Écran Page client (E6)', () => {
     expect(screen.getByText('Touche SIA pour envoyer ta nouvelle demande.')).toBeInTheDocument();
     fireEvent.click(boutonSia());
     expect(await screen.findByText('écran mur')).toBeInTheDocument();
+    await waitFor(() => expect(publierDemande).toHaveBeenCalled());
     expect(retirerDemande).toHaveBeenCalledWith(CLIENT, '$demande1');
     expect(publierDemande).toHaveBeenLastCalledWith(
       CLIENT,
@@ -190,6 +207,7 @@ describe('Écran Page client (E6)', () => {
     remplir();
     fireEvent.click(boutonSia());
     await screen.findByText('écran mur');
+    await waitFor(() => expect(enregistrerProfilClient).toHaveBeenCalled());
     expect(enregistrerProfilClient).toHaveBeenCalledWith(SESSION, {
       version: 1,
       role: 'client',
@@ -315,53 +333,122 @@ describe('Écran Page client (E6)', () => {
   });
 
   describe('retour immédiat au toucher', () => {
-    it('SIA passe au vert et dit « Ta demande est partie. » AVANT la réponse du serveur, puis le Mur s’ouvre', async () => {
+    it('SIA ouvre le Mur AVANT la réponse du serveur ; la publication se termine derrière', async () => {
       const serveur = differe<string>();
       vi.mocked(publierDemande).mockReturnValue(serveur.promesse);
       afficher();
       remplir();
       fireEvent.click(boutonSia());
 
-      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText('Ta demande est partie.')).toBeInTheDocument();
-      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+      // Le serveur n'a rien répondu : le Mur est déjà là, rien n'est encore gardé.
+      expect(await screen.findByText('écran mur')).toBeInTheDocument();
       expect(localStorage.getItem('sia.demande')).toBeNull();
 
       await act(async () => serveur.resoudre('$demande1'));
+      await waitFor(() =>
+        expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
+          eventId: '$demande1',
+        }),
+      );
+      expect(screen.getByText('écran mur')).toBeInTheDocument();
+    });
+
+    it('un deuxième SIA touché pendant que le premier part attend son tour et retire la première demande', async () => {
+      const premiere = differe<string>();
+      vi.mocked(publierDemande)
+        .mockReturnValueOnce(premiere.promesse)
+        .mockResolvedValue('$demande2');
+      afficher();
+      remplir();
+      fireEvent.click(boutonSia());
       expect(await screen.findByText('écran mur')).toBeInTheDocument();
-      expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
-        eventId: '$demande1',
-      });
-    });
 
-    it('pas de double toucher : une seule demande part', async () => {
-      const serveur = differe<string>();
-      vi.mocked(publierDemande).mockReturnValue(serveur.promesse);
+      // On rouvre la page et on retouche SIA alors que le premier envoi n'a pas fini.
       afficher();
       remplir();
       fireEvent.click(boutonSia());
-      fireEvent.click(boutonSia());
-      await act(async () => undefined); // laisse partir l'envoi
+      await act(async () => undefined);
       expect(publierDemande).toHaveBeenCalledTimes(1);
-      await act(async () => serveur.resoudre('$demande1'));
+      expect(retirerDemande).not.toHaveBeenCalled();
+
+      await act(async () => premiere.resoudre('$demande1'));
+      await waitFor(() => expect(publierDemande).toHaveBeenCalledTimes(2));
+      // La deuxième retire la première avant de publier : jamais deux demandes en même temps.
+      expect(retirerDemande).toHaveBeenCalledWith(CLIENT, '$demande1');
+      await waitFor(() =>
+        expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
+          eventId: '$demande2',
+        }),
+      );
     });
 
-    it('le serveur refuse de publier (pas de réseau) : le bouton redevient gris, avec le message', async () => {
+    it('le serveur refuse de publier (pas de réseau) : retour à la page avec le message, rien de tapé n’est perdu', async () => {
       const serveur = differe<string>();
       vi.mocked(publierDemande).mockReturnValue(serveur.promesse);
       afficher();
       remplir();
       fireEvent.click(boutonSia());
-      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+      expect(await screen.findByText('écran mur')).toBeInTheDocument();
 
       await act(async () => serveur.rejeter(coupureReseau()));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Pas de connexion. Réessaie dans un instant.',
+      );
+      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+      // Le formulaire est rendu tel qu'il était ; SIA est gris et prêt pour un nouvel essai.
+      expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Akanda');
+      expect(screen.getByLabelText('De quoi as-tu besoin ?')).toHaveValue('Plombier');
+      expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('5000');
+      expect(screen.getByLabelText('Précise ton besoin (facultatif)')).toHaveValue(
+        "Fuite sous l'évier, ce soir",
+      );
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.queryByText('Ta demande est partie.')).not.toBeInTheDocument();
+      expect(boutonSia()).toBeEnabled();
+      expect(localStorage.getItem('sia.demande')).toBeNull();
+    });
+
+    it('après un refus, la copie du serveur n’écrase pas ce qui était tapé', async () => {
+      vi.mocked(lireProfilClient).mockResolvedValue({
+        ok: true,
+        profil: { version: 1, role: 'client', pseudo: 'ibis-3', zone: 'Lalala' },
+      });
+      vi.mocked(publierDemande).mockRejectedValue(coupureReseau());
+      afficher();
+      await screen.findByText('ibis-3');
+      remplir();
+      fireEvent.click(boutonSia());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      // La page rouverte relit le profil sur le serveur : ce qui était tapé doit rester.
+      await act(async () => undefined);
+      expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Akanda');
+      expect(screen.getByText('ibis-3')).toBeInTheDocument();
+    });
+
+    it('un refus déposé pendant que la page est ouverte (refus très rapide) : le message et ce qui était tapé sont repris tout de suite', () => {
+      afficher();
+      remplir();
+      act(() =>
+        deposerEchec({
+          message: 'Pas de connexion. Réessaie dans un instant.',
+          saisie: {
+            pseudo: 'palmier-48',
+            zone: 'Owendo',
+            service: 'Coiffure',
+            budget: '10 000',
+            texte: 'Demain matin',
+          },
+        }),
+      );
+
       expect(screen.getByRole('alert')).toHaveTextContent(
         'Pas de connexion. Réessaie dans un instant.',
       );
+      expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Owendo');
+      expect(screen.getByLabelText('De quoi as-tu besoin ?')).toHaveValue('Coiffure');
+      expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('10 000');
       expect(boutonSia()).toBeEnabled();
-      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('demande déjà partie : SIA repasse au gris tout de suite, avant la réponse du serveur', async () => {
@@ -396,7 +483,7 @@ describe('Écran Page client (E6)', () => {
       expect(localStorage.getItem('sia.demande')).not.toBeNull();
     });
 
-    it('demande modifiée : la phrase suit tout de suite ; refus du serveur, on retrouve l’état d’avant', async () => {
+    it('demande modifiée : le Mur s’ouvre tout de suite ; refus du serveur, retour à la page avec la nouvelle demande à envoyer', async () => {
       const serveur = differe<string>();
       semerDemande();
       afficher();
@@ -404,32 +491,53 @@ describe('Écran Page client (E6)', () => {
       fireEvent.change(screen.getByLabelText('Ton budget, en FCFA'), { target: { value: '8000' } });
       expect(screen.getByText('Touche SIA pour envoyer ta nouvelle demande.')).toBeInTheDocument();
       fireEvent.click(boutonSia());
-
-      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText('Ta demande est partie.')).toBeInTheDocument();
-      expect(
-        screen.queryByText('Touche SIA pour envoyer ta nouvelle demande.'),
-      ).not.toBeInTheDocument();
+      expect(await screen.findByText('écran mur')).toBeInTheDocument();
 
       await act(async () => serveur.rejeter(coupureReseau()));
-      // L'ancienne demande a bien été retirée avant l'échec : le bouton est gris, on peut renvoyer.
+      // L'ancienne demande a bien été retirée avant l'échec : le bouton est gris, la nouvelle demande reste à envoyer.
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
       expect(boutonSia()).toBeEnabled();
+      expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('8000');
+      expect(retirerDemande).toHaveBeenCalledWith(CLIENT, '$demande1');
+      expect(localStorage.getItem('sia.demande')).toBeNull();
     });
 
-    it('page quittée pendant l’envoi : la confirmation ne ramène pas au Mur', async () => {
+    it('l’ancienne demande ne peut pas être retirée : retour à la page, elle reste partie, la nouvelle reste à envoyer', async () => {
+      vi.mocked(retirerDemande).mockRejectedValue(coupureReseau());
+      semerDemande();
+      afficher();
+      fireEvent.change(screen.getByLabelText('Ton budget, en FCFA'), { target: { value: '8000' } });
+      fireEvent.click(boutonSia());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.getByText('Touche SIA pour envoyer ta nouvelle demande.')).toBeInTheDocument();
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('8000');
+      expect(publierDemande).not.toHaveBeenCalled();
+      expect(localStorage.getItem('sia.demande')).not.toBeNull();
+    });
+
+    it('le refus n’est jamais perdu : même passé aux bulles, on est ramené à la page', async () => {
       const serveur = differe<string>();
       vi.mocked(publierDemande).mockReturnValue(serveur.promesse);
       afficher();
       remplir();
       fireEvent.click(boutonSia());
-      fireEvent.click(screen.getByRole('link', { name: 'Bulles' }));
+      fireEvent.click(await screen.findByRole('link', { name: 'Aller aux bulles' }));
       expect(screen.getByText('écran bulles')).toBeInTheDocument();
 
-      await act(async () => serveur.resoudre('$demande1'));
-      expect(screen.getByText('écran bulles')).toBeInTheDocument();
-      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+      await act(async () => serveur.rejeter(coupureReseau()));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.queryByText('écran bulles')).not.toBeInTheDocument();
+    });
+
+    it('la session a expiré pendant l’envoi : retour à l’accueil', async () => {
+      vi.mocked(enregistrerProfilClient).mockResolvedValue({ ok: false, erreur: 'session' });
+      afficher();
+      remplir();
+      fireEvent.click(boutonSia());
+      expect(await screen.findByText('écran accueil')).toBeInTheDocument();
     });
   });
 

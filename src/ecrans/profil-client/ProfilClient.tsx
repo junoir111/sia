@@ -9,9 +9,14 @@ import type { DemandeClient, ErreursDemande } from '../../logique/demande';
 import { profilClientComplet } from '../../logique/profil-client';
 import type { SaisieProfilClient as SaisieClient } from '../../logique/profil-client';
 import { LIMITES, formaterPrix, lirePrix, pseudoPropose } from '../../logique/profil';
+import type { Session } from '../../matrix/auth';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { publierDemande, retirerDemande } from '../../matrix/mur';
-import { enregistrerProfilClient, lireProfilClient, lirePseudoEnregistre } from '../../matrix/profil';
+import {
+  enregistrerProfilClient,
+  lireProfilClient,
+  lirePseudoEnregistre,
+} from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
 import { AccesBulles } from '../../ui/AccesBulles';
 import { Bandeau } from '../../ui/Bandeau';
@@ -21,6 +26,7 @@ import { ChampQuartier } from '../../ui/ChampQuartier';
 import { MessageErreur } from '../../ui/MessageErreur';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeChevron, IconeCrayon } from '../../ui/icones';
+import { enFile } from '../bandeau/reponses';
 import { EVENEMENT_CHOISI, aChoisi, oublierChoix } from '../bandeau/signal';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { memoriserMoi } from '../mur/useMoi';
@@ -32,6 +38,7 @@ import {
   lireDemandeEnCours,
 } from './demande-en-cours';
 import type { DemandeEnCours } from './demande-en-cours';
+import { deposerEchec, ecouterEchec, reprendreEchec } from './echec-publication';
 import './profil-client.css';
 
 const MESSAGES: Record<Exclude<ErreurReseau, 'session'>, string> = {
@@ -55,6 +62,55 @@ function exigerClient(client: MatrixClient | null): MatrixClient {
   if (!client)
     throw Object.assign(new Error('Client Matrix pas prêt.'), { name: 'ConnectionError' });
   return client;
+}
+
+/**
+ * Retire ma demande précédente (si elle existe encore), enregistre mon profil client puis publie la nouvelle demande.
+ * Rend l'erreur du serveur, ou null si la demande est publiée (et gardée sur ce téléphone pour pouvoir la retirer).
+ * Rien n'est envoyé tant que le client Matrix n'est pas prêt.
+ */
+async function publierLaDemande(
+  session: Session,
+  client: MatrixClient | null,
+  demande: DemandeClient,
+  ancienne: DemandeEnCours | null,
+): Promise<ErreurReseau | null> {
+  let c: MatrixClient;
+  try {
+    c = exigerClient(client);
+    // Relue au moment d'agir : une publication partie juste avant a pu remplacer la demande que je connaissais.
+    const aRetirer = lireDemandeEnCours(Date.now()) ?? ancienne;
+    if (aRetirer) {
+      await retirerDemande(c, aRetirer.eventId);
+      effacerDemandeEnCours();
+    }
+  } catch (e) {
+    return familleErreur(e);
+  }
+  const profil = {
+    version: 1,
+    role: 'client',
+    pseudo: demande.pseudo,
+    zone: demande.zone,
+  } as const;
+  const enregistre = await enregistrerProfilClient(session, profil).catch(() => ({
+    ok: false as const,
+    erreur: 'inconnue' as const,
+  }));
+  if (!enregistre.ok && enregistre.erreur === 'session') return 'session';
+  let eventId: string;
+  try {
+    eventId = await publierDemande(c, demande);
+  } catch (e) {
+    return familleErreur(e);
+  }
+  oublierChoix();
+  try {
+    ecrireDemandeEnCours({ eventId, demande });
+  } catch {
+    // Stockage plein ou bloqué : la demande reste publiée, elle expirera seule.
+  }
+  return null;
 }
 
 function saisieDepuisDemande(d: DemandeClient): SaisieClient {
@@ -84,9 +140,9 @@ export function ProfilClient() {
   );
   const [erreurs, setErreurs] = useState<ErreursDemande>({});
   const [bandeau, setBandeau] = useState<string | null>(null);
-  // Ce que le bouton montre PENDANT que le serveur confirme (affichage immédiat). Quand le serveur refuse,
-  // on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
-  const [attendu, setAttendu] = useState<'envoyee' | 'retiree' | null>(null);
+  // Ce que le bouton montre PENDANT que le serveur confirme le retrait de la demande (affichage immédiat).
+  // Quand le serveur refuse, on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
+  const [attendu, setAttendu] = useState<'retiree' | null>(null);
   const [modifie, setModifie] = useState(false);
   const [retiree, setRetiree] = useState(false);
   const [edition, setEdition] = useState(false);
@@ -94,13 +150,22 @@ export function ProfilClient() {
   const [choisi, setChoisi] = useState(aChoisi);
   const champPseudo = useRef<HTMLInputElement>(null);
   const idPhrase = useId();
-  // Faux si on a quitté la page pendant l'envoi : on ne ramène alors personne au Mur.
-  const ici = useRef(false);
+  // Vrai dès que ce qui était tapé a été repris d'un refus du serveur : la copie du serveur ne doit pas l'écraser.
+  const repris = useRef(false);
+
+  // Le serveur a refusé la publication : ce qui était tapé revient tel quel, avec le message. Le refus peut être
+  // arrivé avant l'ouverture de la page, ou arriver pendant qu'elle est ouverte (refus très rapide).
   useEffect(() => {
-    ici.current = true;
-    return () => {
-      ici.current = false;
+    const reprendre = () => {
+      const echec = reprendreEchec();
+      if (!echec) return;
+      repris.current = true;
+      setSaisie(echec.saisie);
+      setBandeau(echec.message);
+      setModifie(true);
     };
+    reprendre();
+    return ecouterEchec(reprendre);
   }, []);
 
   // Offre acceptée dans le bandeau : la demande est terminée, la page repasse au gris.
@@ -130,6 +195,8 @@ export function ProfilClient() {
           if (lu.erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
           return;
         }
+        // Après un refus : on garde ce qui était tapé, pas la copie du serveur.
+        if (repris.current) return;
         const profil = lu.profil;
         if (profil) {
           setSaisie((avant) => ({ ...avant, pseudo: profil.pseudo, zone: profil.zone }));
@@ -138,7 +205,7 @@ export function ProfilClient() {
         // Pas de profil client : on reprend le pseudo déjà choisi (par exemple en prestataire).
         lirePseudoEnregistre(session)
           .then((pseudo) => {
-            if (actif && pseudo) setSaisie((avant) => ({ ...avant, pseudo }));
+            if (actif && pseudo && !repris.current) setSaisie((avant) => ({ ...avant, pseudo }));
           })
           .catch(() => undefined);
       })
@@ -151,7 +218,7 @@ export function ProfilClient() {
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
   const envoi = attendu !== null;
-  const allume = attendu === null ? enCours !== null : attendu === 'envoyee';
+  const allume = attendu === null && enCours !== null;
 
   function modifier(champ: keyof SaisieClient, valeur: string) {
     setSaisie((avant) => ({ ...avant, [champ]: valeur }));
@@ -187,52 +254,19 @@ export function ProfilClient() {
       setErreurs(verifie.erreurs);
       return;
     }
-    // Le bouton passe au vert tout de suite ; si le serveur refuse, il revient à son état d'avant.
-    setAttendu('envoyee');
-    if (!(await retirer())) {
-      setAttendu(null);
+    const demande = verifie.demande;
+    // Les écrans suivants (Mur, fiches) savent tout de suite qui je suis, sans attendre le serveur.
+    memoriserMoi(session.userId, { role: 'client', pseudo: demande.pseudo, zone: demande.zone });
+    // Au Mur dès le toucher. Le serveur travaille derrière ; s'il refuse, on revient ici avec ce qui était tapé.
+    navigate(cheminMur());
+    const erreur = await enFile(() => publierLaDemande(session, client, demande, enCours));
+    if (erreur === null) return;
+    if (erreur === 'session') {
+      navigate(CHEMINS.accueil, { replace: true });
       return;
     }
-    const demande = verifie.demande;
-    try {
-      const c = exigerClient(client);
-      const profil = {
-        version: 1,
-        role: 'client',
-        pseudo: demande.pseudo,
-        zone: demande.zone,
-      } as const;
-      const enregistre = await enregistrerProfilClient(session, profil);
-      if (!enregistre.ok && enregistre.erreur === 'session') {
-        setAttendu(null);
-        navigate(CHEMINS.accueil, { replace: true });
-        return;
-      }
-      // Profil enregistré : les écrans suivants (Mur, fiches) le savent tout de suite.
-      if (enregistre.ok) {
-        memoriserMoi(session.userId, {
-          role: 'client',
-          pseudo: demande.pseudo,
-          zone: demande.zone,
-        });
-      }
-      const eventId = await publierDemande(c, demande);
-      const nouvelle = { eventId, demande };
-      oublierChoix();
-      setChoisi(false);
-      setEnCours(nouvelle);
-      setModifie(false);
-      try {
-        ecrireDemandeEnCours(nouvelle);
-      } catch {
-        // Stockage plein ou bloqué : la demande reste publiée, elle expirera seule.
-      }
-      setAttendu(null);
-      if (ici.current) navigate(cheminMur());
-    } catch (e) {
-      setAttendu(null);
-      echec(e);
-    }
+    deposerEchec({ message: MESSAGES[erreur], saisie });
+    navigate(CHEMINS.profilClient);
   }
 
   async function toucherSia() {
@@ -265,10 +299,9 @@ export function ProfilClient() {
 
   const pseudoEnSaisie = edition || focusPseudo || saisie.pseudo.trim() === '';
 
-  // La phrase suit le bouton, sans attendre le serveur (« Ta demande est partie. » dès le toucher).
+  // La phrase suit le bouton, sans attendre le serveur (« Ta demande est retirée. » dès le toucher).
   let phrase = '';
-  if (attendu === 'envoyee') phrase = 'Ta demande est partie.';
-  else if (attendu === 'retiree') phrase = 'Ta demande est retirée.';
+  if (attendu === 'retiree') phrase = 'Ta demande est retirée.';
   else if (allume && modifie) phrase = 'Touche SIA pour envoyer ta nouvelle demande.';
   else if (allume) phrase = 'Ta demande est partie.';
   else if (retiree) phrase = 'Ta demande est retirée.';
