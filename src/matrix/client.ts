@@ -119,33 +119,19 @@ async function effacerReserveCrypto(): Promise<void> {
   await effacerBase(`${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto-meta`);
 }
 
-/** Vrai si une réserve de clés existe déjà sur ce téléphone (faux si on ne peut pas le savoir). */
-async function reserveExiste(): Promise<boolean> {
-  try {
-    const bases = await indexedDB.databases();
-    return bases.some((b) => b.name === `${PREFIXE_BASE_CRYPTO}::matrix-sdk-crypto`);
-  } catch {
-    return false;
-  }
-}
-
 /** Au-delà, la réserve de clés est jugée bloquée (vu en vrai : init qui ne finit jamais). */
 export const DELAI_INIT_CRYPTO_MS = 25_000;
 
 /**
- * Lance le chiffrement. S'il ne répond pas à temps, la réserve est bloquée : on demande son
- * effacement puis on recharge la page (l'effacement passe dès que l'ancienne connexion est fermée).
+ * Lance le chiffrement. S'il ne répond pas à temps, la réserve est sûrement tenue ouverte par l'ancienne
+ * page : on recharge la page (au plus une fois toutes les 5 minutes) et le démarrage échoue. Les clés ne
+ * sont JAMAIS effacées ici (voir preparerChiffrement).
  */
 async function initAvecDelai(c: MatrixClient): Promise<void> {
   let minuterie: ReturnType<typeof setTimeout> | undefined;
   const delai = new Promise<never>((_, rejeter) => {
     minuterie = setTimeout(() => {
-      void effacerReserveCrypto();
-      try {
-        window.location.reload();
-      } catch {
-        // Pas de page à recharger (tests) : l'erreur suffit.
-      }
+      rechargerAppli();
       rejeter(new Error('Chiffrement bloqué.'));
     }, DELAI_INIT_CRYPTO_MS);
   });
@@ -159,9 +145,27 @@ async function initAvecDelai(c: MatrixClient): Promise<void> {
   }
 }
 
+/** Le chiffrement refuse la réserve parce qu'elle appartient à un AUTRE appareil (autre compte ou autre connexion). */
+const ERREUR_AUTRE_RESERVE = /account in the store/i;
+
+function estReserveDUnAutre(erreur: unknown): boolean {
+  const texte =
+    typeof erreur === 'string'
+      ? erreur
+      : typeof erreur === 'object' && erreur !== null && 'message' in erreur
+        ? String((erreur as { message: unknown }).message)
+        : '';
+  return ERREUR_AUTRE_RESERVE.test(texte);
+}
+
 /**
- * Prépare le chiffrement. Une réserve laissée par un AUTRE compte (changement de compte sans
- * déconnexion propre) bloquerait le démarrage pour toujours : elle est effacée, puis on réessaie une fois.
+ * Prépare le chiffrement. RÈGLE : les clés d'un appareil ne sont jamais effacées tant que cet appareil
+ * garde la même identité. Effacer puis recommencer avec le même identifiant d'appareil change ses clés sans
+ * que ses contacts le sachent : ils continuent de chiffrer pour les anciennes, et leurs messages deviennent
+ * illisibles pour lui (vu en vrai : un sens de la conversation qui « n'arrive pas »).
+ * On n'efface donc que la réserve d'un AUTRE appareil : propriétaire noté différent, ou refus du chiffrement
+ * (« account in the store »). Une réserve sans propriétaire connu (anciennes versions) est gardée : si elle
+ * n'est pas à nous, le chiffrement le dira. Tout autre échec fait échouer le démarrage, qui sera réessayé.
  */
 async function preparerChiffrement(c: MatrixClient, session: Session): Promise<void> {
   const proprietaire = `${session.userId}|${session.deviceId}`;
@@ -171,20 +175,18 @@ async function preparerChiffrement(c: MatrixClient, session: Session): Promise<v
   } catch {
     precedent = null;
   }
-  // Réserve d'un autre compte, ou réserve sans propriétaire connu (anciennes versions) : effacée.
-  if (precedent !== proprietaire && (precedent !== null || (await reserveExiste()))) {
-    await effacerReserveCrypto();
-  }
+  if (precedent !== null && precedent !== proprietaire) await effacerReserveCrypto();
   try {
     await initAvecDelai(c);
-  } catch {
+  } catch (erreur) {
+    if (!estReserveDUnAutre(erreur)) throw erreur;
     await effacerReserveCrypto();
     await initAvecDelai(c);
   }
   try {
     localStorage.setItem(CLE_PROPRIETAIRE_CRYPTO, proprietaire);
   } catch {
-    // Stockage refusé : la reprise par effacement ci-dessus reste le filet de sécurité.
+    // Stockage refusé : le chiffrement refusera de lui-même la réserve d'un autre appareil.
   }
 }
 

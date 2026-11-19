@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emetteur } from './faux-matrix';
 
-const faux = vi.hoisted(() => ({ clients: [] as unknown[], options: [] as unknown[], echecsInit: 0, bloque: false }));
+/** Texte réel de l'erreur du chiffrement quand la réserve de clés est celle d'un AUTRE appareil. */
+const ERREUR_AUTRE_RESERVE =
+  "the account in the store doesn't match the account in the constructor: expected @a:sia:A, got @b:sia:B";
+
+const faux = vi.hoisted(() => ({
+  clients: [] as unknown[],
+  options: [] as unknown[],
+  echecsInit: 0,
+  bloque: false,
+  erreurInit: '',
+}));
 
 vi.mock('matrix-js-sdk', async (original) => {
   const vrai = await original<typeof import('matrix-js-sdk')>();
@@ -19,7 +29,7 @@ vi.mock('matrix-js-sdk', async (original) => {
           if (faux.bloque) await new Promise(() => undefined);
           if (faux.echecsInit > 0) {
             faux.echecsInit -= 1;
-            throw new Error('account in the store does not match');
+            throw new Error(faux.erreurInit);
           }
         }),
         startClient: vi.fn(async () => undefined),
@@ -66,9 +76,31 @@ async function pret(): Promise<void> {
 beforeEach(() => {
   faux.clients.length = 0;
   faux.options.length = 0;
+  faux.echecsInit = 0;
+  faux.erreurInit = ERREUR_AUTRE_RESERVE;
   localStorage.clear();
 });
-afterEach(() => arreterClient());
+afterEach(() => {
+  arreterClient();
+  vi.unstubAllGlobals();
+});
+
+/** Base IndexedDB simulée : note les réserves de clés qu'on efface. */
+function fauxIndexedDB(): string[] {
+  const supprimees: string[] = [];
+  vi.stubGlobal('indexedDB', {
+    deleteDatabase: (nom: string) => {
+      supprimees.push(nom);
+      const requete: { onsuccess?: () => void } = {};
+      queueMicrotask(() => requete.onsuccess?.());
+      return requete;
+    },
+  });
+  return supprimees;
+}
+
+const RESERVE = 'sia-crypto::matrix-sdk-crypto';
+const RESERVE_META = 'sia-crypto::matrix-sdk-crypto-meta';
 
 describe('demarrerClient', () => {
   it('crée un seul client, chiffrement Rust en IndexedDB, puis attend le premier sync', async () => {
@@ -103,31 +135,59 @@ describe('demarrerClient', () => {
     expect(options.localTimeoutMs).toBe(DELAI_REQUETE_MS);
   });
 
-  it('réserve de clés d’un autre compte : init raté une fois, réserve effacée, puis réessai', async () => {
+  it('réserve de clés d’un autre compte : effacée avant le démarrage, le propriétaire est noté', async () => {
+    const supprimees = fauxIndexedDB();
     localStorage.setItem('sia.crypto-de', '@autre:sia|AUTRE');
     const promesse = demarrerClient(SESSION);
     await vi.waitFor(() => expect(dernier()?.initRustCrypto).toHaveBeenCalled());
     await pret();
     await promesse;
+    expect(supprimees).toEqual([RESERVE, RESERVE_META]);
     expect(localStorage.getItem('sia.crypto-de')).toBe(`${SESSION.userId}|APP`);
   });
 
-  it('chiffrement qui échoue la 1re fois : la réserve est effacée et on réessaie une fois', async () => {
+  it('le chiffrement dit que la réserve est celle d’un autre appareil : effacée, puis un seul réessai', async () => {
+    const supprimees = fauxIndexedDB();
     faux.echecsInit = 1;
     const promesse = demarrerClient(SESSION);
     await pret();
     await promesse;
     expect(dernier().initRustCrypto).toHaveBeenCalledTimes(2);
+    expect(supprimees).toEqual([RESERVE, RESERVE_META]);
   });
 
-  it('réserve de clés bloquée (init sans fin) : abandon après le délai, le démarrage échoue', async () => {
+  it('une réserve sans propriétaire connu (anciennes versions) est gardée : ses clés sont peut-être les nôtres', async () => {
+    const supprimees = fauxIndexedDB();
+    const promesse = demarrerClient(SESSION);
+    await pret();
+    await promesse;
+    expect(supprimees).toEqual([]);
+    expect(localStorage.getItem('sia.crypto-de')).toBe(`${SESSION.userId}|APP`);
+  });
+
+  it('même appareil, échec inattendu du chiffrement : les clés ne sont JAMAIS effacées, le démarrage échoue', async () => {
+    // Effacer les clés d'un appareil qui garde la même identité change ses clés sans que les autres le sachent :
+    // leurs messages deviennent illisibles pour lui.
+    const supprimees = fauxIndexedDB();
+    localStorage.setItem('sia.crypto-de', `${SESSION.userId}|APP`);
+    faux.echecsInit = 1;
+    faux.erreurInit = 'out of memory';
+    await expect(demarrerClient(SESSION)).rejects.toThrow('out of memory');
+    expect(supprimees).toEqual([]);
+    expect(dernier().initRustCrypto).toHaveBeenCalledTimes(1);
+  });
+
+  it('réserve de clés bloquée (init sans fin) : abandon après le délai, sans effacer les clés', async () => {
+    const supprimees = fauxIndexedDB();
+    localStorage.setItem('sia.crypto-de', `${SESSION.userId}|APP`);
     faux.bloque = true;
     vi.useFakeTimers();
     try {
       const promesse = demarrerClient(SESSION);
       const verdict = expect(promesse).rejects.toThrow();
-      await vi.advanceTimersByTimeAsync(2 * 25_000 + 100);
+      await vi.advanceTimersByTimeAsync(25_000 + 100);
       await verdict;
+      expect(supprimees).toEqual([]);
     } finally {
       faux.bloque = false;
       vi.useRealTimers();
