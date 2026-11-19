@@ -51,7 +51,9 @@
   pointer-events: none;
 }
 
-.mur__saisie {
+/* Deux classes : sans cela, `.champ__saisie` (padding 0 16px) passe parfois devant dans la version fabriquée
+   (l'ordre des feuilles de style n'est pas le même qu'en développement) et le texte glisse sous la loupe. */
+.mur__recherche .mur__saisie {
   padding-left: 44px;
   -webkit-appearance: none;
   appearance: none;
