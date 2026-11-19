@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS, cheminBulle } from '../src/chemins';
 import { useMatrix } from '../src/coquille/FournisseurMatrix';
@@ -244,6 +244,20 @@ describe('Écran Bulle (M4)', () => {
     afficher();
     expect(marquerAffiche).toHaveBeenCalledWith(client, SALON, '$m2');
     expect(marquerAffiche).not.toHaveBeenCalledWith(client, SALON, '$m1');
+  });
+
+  it('le fil qui se rafraîchit ne relance pas le compte à rebours d’un message déjà affiché', () => {
+    afficher();
+    expect(marquerAffiche).toHaveBeenCalledTimes(1);
+    const { on } = client as unknown as { on: ReturnType<typeof vi.fn> };
+    const relire = on.mock.calls.find(([nom]) => nom === 'Room.timeline')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(relire).toBeDefined();
+    // Chaque rafraîchissement du fil refait des objets « message » tout neufs.
+    act(() => relire?.());
+    act(() => relire?.());
+    expect(marquerAffiche).toHaveBeenCalledTimes(1);
   });
 
   it('l’encadré « La demande » se replie', () => {
