@@ -5,6 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: 100%;
   min-height: var(--sia-hauteur-bouton);
   padding: 0 24px;
@@ -42,6 +43,17 @@
 
 .bouton--principal[aria-busy='true'] {
   cursor: progress;
+}
+
+/* Action partie, serveur pas encore confirmé : le bouton le dit (« Demande envoyée… ») et garde sa couleur. */
+.bouton--principal.bouton--envoye:disabled {
+  background: var(--sia-accent);
+  border-color: transparent;
+  color: var(--sia-sur-accent);
+}
+
+.bouton__coche {
+  flex: none;
 }
 
 .bouton--secondaire {
@@ -526,9 +538,9 @@
   color: var(--sia-sur-accent);
 }
 
+/* Le bouton montre déjà l'état voulu pendant que le serveur confirme : pas de voile, seulement le curseur. */
 .bouton-sia[aria-busy='true'] {
   cursor: progress;
-  opacity: 0.7;
 }
 
 .bouton-sia:active:not(:disabled) {
@@ -766,6 +778,43 @@
   .petit-bouton {
     transition: none;
   }
+}
+
+/* --- Réponse Oui / Non : question, boutons, puis « Réponse envoyée… » à la même hauteur --- */
+.reponse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--sia-toucher);
+}
+
+.reponse__texte {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--sia-accent);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.reponse__texte--envoi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sia-texte);
+  font-weight: 500;
+}
+
+.reponse__texte--erreur {
+  color: var(--sia-alerte);
+  font-size: var(--sia-aide);
+  line-height: 18px;
+}
+
+.reponse__coche {
+  flex: none;
+  color: var(--sia-accent);
 }
 
 /* --- Se déconnecter : discret, en bas de l'écran --- */

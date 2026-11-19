@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useNavigate } from 'react-router-dom';
 import { cheminBulle } from '../../chemins';
@@ -13,7 +13,11 @@ import { demandesActives, ecouterDemandes, monStatutActif } from '../../matrix/m
 import type { DemandeRecue } from '../../matrix/mur';
 import { lireProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
+import { useGlisse } from '../../ui/useGlisse';
 import { familleErreur } from '../profil-client/branchements';
+import { CarteAlerte } from './CarteAlerte';
+import type { VueAlerte } from './CarteAlerte';
+import { commencerReponse, enFile, finirReponse, rater } from './reponses';
 import { EVENEMENT_DISPONIBLE, signalerChoix } from './signal';
 import { ajouterVue, lireVues } from './vues';
 import './bandeau.css';
@@ -22,17 +26,17 @@ import './bandeau.css';
  * Bandeaux M1 / M2, posés au-dessus de tout écran (appli ouverte seulement) :
  * - prestataire disponible : une demande de client arrive → « D'accord ? » Non / Oui ;
  * - client : un prestataire a dit oui → « Tu veux discuter ? » Non / Oui.
- * Un seul bandeau à la fois ; les suivants attendent leur tour.
+ * Les alertes s'empilent : la plus récente en haut, trois au plus à la fois ; les autres attendent.
+ * Un toucher change la carte tout de suite (« Réponse envoyée… ») ; elle s'en va quand le serveur confirme.
  */
 
-type Element =
+type Alerte =
   | { type: 'demande'; cle: string; demande: DemandeRecue }
   | { type: 'offre'; cle: string; bulle: ResumeBulle };
 
+/** Alertes montrées en même temps. */
+const NB_VISIBLES = 3;
 const VIBRATION_MS = 80;
-const TAILLE_LIGNE = 15;
-const TAILLE_LIGNE_MIN = 13;
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie.';
 
 function estDisponible(c: MatrixClient): boolean {
   return monStatutActif(c) !== null || lireDisponible();
@@ -48,48 +52,32 @@ async function moiPublic(c: MatrixClient): Promise<ParticipantBulle> {
   throw new Error('Profil introuvable.');
 }
 
-function textes(el: Element): { ligne: string; question: string; nom: string } {
-  if (el.type === 'demande') {
+function vueDe(a: Alerte): VueAlerte {
+  if (a.type === 'demande') {
     return {
-      ligne: texteBandeau(el.demande.demande),
-      question: "D'accord ?",
+      cle: a.cle,
       nom: 'Nouvelle demande',
+      ligne: texteBandeau(a.demande.demande),
+      question: "D'accord ?",
     };
   }
-  const { pseudo, zone } = el.bulle.autre;
+  const { pseudo, zone } = a.bulle.autre;
   return {
+    cle: a.cle,
+    nom: 'Nouvelle offre',
     ligne: `${pseudo} (${zone}) dit oui`,
     question: 'Tu veux discuter ?',
-    nom: 'Nouvelle offre',
   };
-}
-
-/** Réduit un peu la taille du texte (jusqu'à 13 px) pour qu'il tienne sur une ligne, comme la maquette. */
-function useTexteAjuste(texte: string | null) {
-  const ref = useRef<HTMLParagraphElement>(null);
-  useLayoutEffect(() => {
-    const p = ref.current;
-    if (!p || texte === null) return;
-    let taille = TAILLE_LIGNE;
-    p.style.fontSize = `${taille}px`;
-    while (p.scrollWidth > p.clientWidth && taille > TAILLE_LIGNE_MIN) {
-      taille -= 0.5;
-      p.style.fontSize = `${taille}px`;
-    }
-  }, [texte]);
-  return ref;
 }
 
 export function Bandeau() {
   const { client } = useMatrix();
   const navigate = useNavigate();
-  const [file, setFile] = useState<Element[]>([]);
-  const [occupe, setOccupe] = useState(false);
-  // Message d'échec, attaché au bandeau qui l'a eu (il disparaît avec lui).
-  const [echec, setEchec] = useState<{ cle: string; texte: string } | null>(null);
+  // Dans l'ordre d'arrivée : la plus récente est la dernière.
+  const [file, setFile] = useState<Alerte[]>([]);
   const vues = useRef<Set<string> | null>(null);
-  const actuel = file[0] ?? null;
-  const ligne = useTexteAjuste(actuel ? textes(actuel).ligne : null);
+  const annoncees = useRef(new Set<string>());
+  const pile = useGlisse<HTMLDivElement>({ arrivee: false });
 
   const dejaVues = useCallback((): Set<string> => {
     vues.current ??= lireVues();
@@ -141,7 +129,7 @@ export function Bandeau() {
       const encore = new Set(offres.map((b) => b.roomId));
       setFile((f) => {
         const gardes = f.filter((x) => x.type === 'demande' || encore.has(x.cle));
-        const nouvelles: Element[] = offres
+        const nouvelles: Alerte[] = offres
           .filter((b) => !gardes.some((x) => x.cle === b.roomId))
           .map((b) => ({ type: 'offre', cle: b.roomId, bulle: b }));
         return nouvelles.length === 0 && gardes.length === f.length ? f : [...gardes, ...nouvelles];
@@ -149,88 +137,67 @@ export function Bandeau() {
     });
   }, [client]);
 
-  // Une vibration courte à chaque nouveau bandeau (sans texte hors de l'appli).
-  const cleActuelle = actuel?.cle ?? null;
+  // Une vibration courte quand une nouvelle alerte arrive (sans texte hors de l'appli).
   useEffect(() => {
-    if (cleActuelle === null) return;
+    const nouvelle = file.some((a) => !annoncees.current.has(a.cle));
+    annoncees.current = new Set(file.map((a) => a.cle));
+    if (!nouvelle) return;
     try {
       navigator.vibrate?.(VIBRATION_MS);
     } catch {
       // Vibration refusée par le téléphone : rien de grave.
     }
-  }, [cleActuelle]);
+  }, [file]);
 
-  if (!client || !actuel) return null;
+  if (!client) return null;
   const c = client;
-  const el = actuel;
 
-  async function agir(oui: boolean) {
-    if (occupe) return;
-    setOccupe(true);
-    setEchec(null);
+  async function repondre(alerte: Alerte, oui: boolean): Promise<void> {
+    const { cle } = alerte;
+    if (alerte.type === 'demande' && !oui) {
+      // « Non » à une demande : rien à envoyer. La carte s'en va tout de suite et ne revient jamais.
+      vues.current = ajouterVue(dejaVues(), cle);
+      retirer(cle);
+      return;
+    }
+    // Déjà répondu (ici ou dans la liste des bulles) : on ne répond pas deux fois.
+    if (!commencerReponse(cle)) return;
     try {
       let bulleExistante: string | null = null;
-      if (el.type === 'demande') {
-        if (oui) {
-          const r = await direOui(c, el.demande.demande, el.cle, await moiPublic(c));
-          if (r.reutilisee) bulleExistante = r.roomId;
-        }
-        vues.current = ajouterVue(dejaVues(), el.cle);
+      if (alerte.type === 'demande') {
+        const r = await direOui(c, alerte.demande.demande, cle, await moiPublic(c));
+        if (r.reutilisee) bulleExistante = r.roomId;
+        vues.current = ajouterVue(dejaVues(), cle);
       } else if (oui) {
-        await accepterOffre(c, el.cle);
+        await enFile(() => accepterOffre(c, cle));
         // Le choix est fait (accepterOffre oublie déjà la demande locale) : la page client repasse au gris.
         signalerChoix();
       } else {
-        await refuserOffre(c, el.cle);
+        await refuserOffre(c, cle);
       }
-      retirer(el.cle);
-      if (el.type === 'offre' && oui) navigate(cheminBulle(el.cle));
+      retirer(cle);
+      finirReponse(cle);
+      if (alerte.type === 'offre' && oui) navigate(cheminBulle(cle));
       // « Oui » à un client avec qui une bulle est déjà ouverte : on y va.
       if (bulleExistante !== null) navigate(cheminBulle(bulleExistante));
     } catch (e) {
       if (familleErreur(e) === 'reseau') {
-        setEchec({ cle: el.cle, texte: PAS_DE_RESEAU });
-      } else {
-        // Demande retirée, expirée ou offre déjà fermée : le bandeau s'en va.
-        if (el.type === 'demande') vues.current = ajouterVue(dejaVues(), el.cle);
-        retirer(el.cle);
+        rater(cle, 'reseau');
+        return;
       }
-    } finally {
-      setOccupe(false);
+      // Demande retirée, expirée ou offre déjà fermée : la carte s'en va.
+      if (alerte.type === 'demande') vues.current = ajouterVue(dejaVues(), cle);
+      retirer(cle);
+      finirReponse(cle);
     }
   }
 
-  const t = textes(el);
-  const erreur = echec?.cle === el.cle ? echec.texte : null;
+  const visibles = file.slice(-NB_VISIBLES).reverse();
   return (
-    <section className="notif" aria-label={t.nom} aria-live="polite">
-      <div className="notif__carte" key={el.cle}>
-        <p className="notif__ligne" ref={ligne}>
-          {t.ligne}
-        </p>
-        <div className="notif__rangee">
-          <p className={erreur ? 'notif__question notif__question--erreur' : 'notif__question'}>
-            {erreur ?? t.question}
-          </p>
-          <button
-            type="button"
-            className="petit-bouton"
-            disabled={occupe}
-            onClick={() => void agir(false)}
-          >
-            Non
-          </button>
-          <button
-            type="button"
-            className="petit-bouton petit-bouton--plein"
-            disabled={occupe}
-            aria-busy={occupe || undefined}
-            onClick={() => void agir(true)}
-          >
-            Oui
-          </button>
-        </div>
-      </div>
-    </section>
+    <div className="notif" ref={pile} aria-live="polite" aria-relevant="additions">
+      {visibles.map((a) => (
+        <CarteAlerte key={a.cle} vue={vueDe(a)} onRepondre={(oui) => void repondre(a, oui)} />
+      ))}
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS } from '../src/chemins';
 import { ProfilPrestataire } from '../src/ecrans/profil-prestataire/ProfilPrestataire';
@@ -8,6 +8,7 @@ import { monStatutActif, publierStatut, retirerStatut } from '../src/matrix/mur'
 import { enregistrerProfil, lireProfil } from '../src/matrix/profil';
 import { lireSession } from '../src/matrix/session';
 import { ecrireDisponible, lireDisponible } from '../src/appareil/disponible';
+import { coupureReseau, differe } from './faux-ecran';
 
 // Jamais le vrai serveur ni le vrai stockage : tout est simulé.
 vi.mock('../src/matrix/profil', () => ({
@@ -261,6 +262,172 @@ describe('Écran Profil prestataire (E5)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
     expect(ecrireDisponible).not.toHaveBeenCalled();
+  });
+
+  describe('retour immédiat au toucher', () => {
+    const PROFIL_ENREGISTRE = {
+      version: 1 as const,
+      role: 'prestataire' as const,
+      pseudo: 'mangue',
+      metier: 'Plombier',
+      zone: 'Owendo',
+      modalite: 'deplace' as const,
+      services: [],
+    };
+
+    it('SIA passe au vert et dit « Tu es visible à… » AVANT la réponse du serveur, puis le Mur s’ouvre', async () => {
+      const serveur = differe<{ ok: true }>();
+      vi.mocked(enregistrerProfil).mockReturnValue(serveur.promesse);
+      afficher();
+      await attendreChargement();
+      remplir();
+      fireEvent.click(boutonSia());
+
+      // Le serveur n'a pas répondu : le bouton est déjà vert et la phrase déjà là.
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('Tu es visible à Akanda.')).toBeInTheDocument();
+      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+      expect(ecrireDisponible).not.toHaveBeenCalled();
+
+      await act(async () => serveur.resoudre({ ok: true }));
+      expect(await screen.findByText('écran mur')).toBeInTheDocument();
+      expect(ecrireDisponible).toHaveBeenCalledWith(true);
+    });
+
+    it('pas de double toucher : un seul enregistrement part', async () => {
+      const serveur = differe<{ ok: true }>();
+      vi.mocked(enregistrerProfil).mockReturnValue(serveur.promesse);
+      afficher();
+      await attendreChargement();
+      remplir();
+      fireEvent.click(boutonSia());
+      fireEvent.click(boutonSia());
+      expect(enregistrerProfil).toHaveBeenCalledTimes(1);
+      await act(async () => serveur.resoudre({ ok: true }));
+    });
+
+    it('l’enregistrement est refusé (pas de réseau) : le bouton redevient gris, avec le message', async () => {
+      const serveur = differe<{ ok: false; erreur: 'reseau' }>();
+      vi.mocked(enregistrerProfil).mockReturnValue(serveur.promesse);
+      afficher();
+      await attendreChargement();
+      remplir();
+      fireEvent.click(boutonSia());
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+
+      await act(async () => serveur.resoudre({ ok: false, erreur: 'reseau' }));
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByText(/Tu es visible/)).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Pas de connexion. Réessaie dans un instant.',
+      );
+      expect(boutonSia()).toBeEnabled();
+      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+    });
+
+    it('la publication sur le Mur est refusée : retour arrière, puis on peut réessayer', async () => {
+      const serveur = differe<string>();
+      vi.mocked(enregistrerProfil).mockResolvedValue({ ok: true });
+      vi.mocked(publierStatut).mockReturnValueOnce(serveur.promesse);
+      afficher();
+      await attendreChargement();
+      remplir();
+      fireEvent.click(boutonSia());
+      await waitFor(() => expect(publierStatut).toHaveBeenCalled());
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+
+      await act(async () => serveur.rejeter(coupureReseau()));
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(ecrireDisponible).not.toHaveBeenCalled();
+
+      fireEvent.click(boutonSia());
+      expect(await screen.findByText('écran mur')).toBeInTheDocument();
+    });
+
+    it('déjà visible : SIA repasse au gris tout de suite, avant la réponse du serveur', async () => {
+      const serveur = differe();
+      vi.mocked(retirerStatut).mockReturnValue(serveur.promesse);
+      vi.mocked(lireProfil).mockResolvedValue({ ok: true, profil: PROFIL_ENREGISTRE });
+      vi.mocked(monStatutActif).mockReturnValue({
+        eventId: '$statut',
+        statut: { pseudo: 'mangue', metier: 'Plombier', zone: 'Owendo', fin: Date.now() + 60_000 },
+      });
+      afficher();
+      await screen.findByText('Tu es visible à Owendo.');
+      fireEvent.click(boutonSia());
+
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByText("Tu n'es plus visible.")).toBeInTheDocument();
+      expect(ecrireDisponible).not.toHaveBeenCalled();
+
+      await act(async () => serveur.resoudre());
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+      expect(ecrireDisponible).toHaveBeenLastCalledWith(false);
+    });
+
+    it('déjà visible : le serveur refuse d’éteindre, SIA redevient vert avec un message', async () => {
+      const serveur = differe();
+      vi.mocked(retirerStatut).mockReturnValue(serveur.promesse);
+      vi.mocked(lireProfil).mockResolvedValue({ ok: true, profil: PROFIL_ENREGISTRE });
+      vi.mocked(monStatutActif).mockReturnValue({
+        eventId: '$statut',
+        statut: { pseudo: 'mangue', metier: 'Plombier', zone: 'Owendo', fin: Date.now() + 60_000 },
+      });
+      afficher();
+      await screen.findByText('Tu es visible à Owendo.');
+      fireEvent.click(boutonSia());
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
+
+      await act(async () => serveur.rejeter(coupureReseau()));
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('Tu es visible à Owendo.')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(ecrireDisponible).not.toHaveBeenCalled();
+    });
+
+    it('quartier modifié alors qu’on est visible : la phrase suit tout de suite, retour arrière si refus', async () => {
+      const serveur = differe<{ ok: false; erreur: 'reseau' }>();
+      vi.mocked(lireProfil).mockResolvedValue({ ok: true, profil: PROFIL_ENREGISTRE });
+      vi.mocked(monStatutActif).mockReturnValue({
+        eventId: '$statut',
+        statut: { pseudo: 'mangue', metier: 'Plombier', zone: 'Owendo', fin: Date.now() + 60_000 },
+      });
+      vi.mocked(enregistrerProfil).mockReturnValue(serveur.promesse);
+      afficher();
+      await screen.findByText('Tu es visible à Owendo.');
+      fireEvent.change(screen.getByRole('combobox', { name: 'Quartier' }), {
+        target: { value: 'Akanda' },
+      });
+      expect(screen.getByText('Touche SIA pour enregistrer.')).toBeInTheDocument();
+      fireEvent.click(boutonSia());
+
+      // Tout de suite : le nouveau quartier, plus de « Touche SIA pour enregistrer. ».
+      expect(screen.getByText('Tu es visible à Akanda.')).toBeInTheDocument();
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+
+      await act(async () => serveur.resoudre({ ok: false, erreur: 'reseau' }));
+      // État d'avant : toujours visible, avec le changement de quartier pas encore enregistré.
+      expect(screen.queryByText('Tu es visible à Akanda.')).not.toBeInTheDocument();
+      expect(screen.getByText('Touche SIA pour enregistrer.')).toBeInTheDocument();
+      expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+    });
+
+    it('page quittée pendant l’envoi : la confirmation ne ramène pas au Mur', async () => {
+      const serveur = differe<{ ok: true }>();
+      vi.mocked(enregistrerProfil).mockReturnValue(serveur.promesse);
+      afficher();
+      await attendreChargement();
+      remplir();
+      fireEvent.click(boutonSia());
+      fireEvent.click(screen.getByRole('link', { name: 'Bulles' }));
+      expect(screen.getByText('écran bulles')).toBeInTheDocument();
+
+      await act(async () => serveur.resoudre({ ok: true }));
+      expect(screen.getByText('écran bulles')).toBeInTheDocument();
+      expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+    });
   });
 
   it('petit accès aux bulles en haut', async () => {

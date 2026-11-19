@@ -62,8 +62,12 @@ export type ResumeBulle = {
 export const LONGUEUR_MAX_MESSAGE = 1000;
 const DUREE_ECRITURE_MS = 5000;
 const ATTENTE_CHIFFREMENT_MS = 10_000;
-const PAS_ATTENTE_MS = 250;
+/** Pas entre deux relectures locales (sans réseau) en attendant que la synchro apporte la bulle. */
+const PAS_ATTENTE_MS = 100;
 const DELAI_REGROUPEMENT_MS = 50;
+/** Au plus un partage anticipé de la clé de chiffrement toutes les 3 s pour une même bulle. */
+const PAUSE_CHAUFFAGE_MS = 3000;
+const BULLES_MAX_CHAUFFAGE = 200;
 const FORME_RAISON = /^(.+) \(([^()]+)\) dit oui$/;
 const TYPES_MESSAGE = new Set(['m.room.message', 'm.room.encrypted']);
 /** Invitations « X vous demande » affichées (et acceptables) en même temps : les autres sont quittées sans bruit. */
@@ -181,11 +185,14 @@ function autreDe(
   };
 }
 
-/** La bulle gardée pour chaque personne (règle `meilleure`), sans compter la bulle `sauf`. */
+/**
+ * La bulle gardée pour chaque personne (règle `meilleure`), sans compter la bulle `sauf`
+ * ni celles que je suis en train de quitter.
+ */
 function bullesGardees(c: MatrixClient, moiId: string, sauf?: string): Map<string, BulleOuverte> {
   const gardees = new Map<string, BulleOuverte>();
   for (const salon of c.getRooms()) {
-    if (salon.roomId === sauf) continue;
+    if (salon.roomId === sauf || enDepart.has(salon.roomId)) continue;
     const ouverte = autreDe(c, salon, moiId)?.ouverte;
     if (!ouverte) continue;
     const deja = gardees.get(ouverte.autreId);
@@ -343,6 +350,8 @@ async function accepterDemandeDirecte(
     await c.leave(roomId).catch(() => undefined);
     throw new Error('Bulle non chiffrée ou invalide : refusée.');
   }
+  // Bulle vérifiée : la clé est partagée en arrière-plan, mon premier message partira en un aller-retour.
+  prechaufferBulle(c, roomId);
 }
 
 /** Attend (10 s au plus) que `condition` soit vraie. */
@@ -414,13 +423,15 @@ async function demanderAUneFois(
     ],
   });
   try {
+    // L'invitation part tout de suite pendant que la synchro apporte la bulle : les deux attentes se
+    // recouvrent (2 allers-retours en tout, au lieu de 2 puis l'attente de la synchro).
+    const bulleSure = attendre(
+      async () => (await estChiffree(c, room_id)) && bulleCreeeSaine(c, room_id),
+    ).catch(() => false);
     await c.invite(room_id, userIdPrestataire, {
       reason: `${client.pseudo} (${client.zone}) vous demande`,
     });
-    const sure = await attendre(
-      async () => (await estChiffree(c, room_id)) && bulleSaine(c, room_id),
-    );
-    if (!sure) throw new Error('Bulle non chiffrée ou invalide : demande annulée.');
+    if (!(await bulleSure)) throw new Error('Bulle non chiffrée ou invalide : demande annulée.');
   } catch (erreur) {
     await abandonnerBulle(c, room_id, userIdPrestataire);
     // Course croisée : ma bulle a perdu contre celle que l'autre m'a ouverte en même temps → on y va.
@@ -429,6 +440,21 @@ async function demanderAUneFois(
     throw erreur;
   }
   return { roomId: room_id, reutilisee: false };
+}
+
+/**
+ * Bulle que je viens de créer : saine, ou saine sauf que l'invitation de l'autre n'est pas encore arrivée
+ * par la synchro (le serveur l'a déjà acquittée). Chiffrée, à 2 au plus, état io.sia.bulle valable et écrit
+ * par moi : tout le reste de `bulleSaine` est exigé. Un autre déjà parti ou banni reste refusé.
+ */
+function bulleCreeeSaine(c: MatrixClient, roomId: string): boolean {
+  const moiId = c.getUserId();
+  const salon = estIdSalon(roomId) ? c.getRoom(roomId) : null;
+  if (!moiId || !salon) return false;
+  const verdict = examinerBulle(salon, moiId);
+  if (verdict.statut !== 'saine' && verdict.statut !== 'autre-partie') return false;
+  if (verdict.createur !== moiId) return false;
+  return verdict.statut === 'saine' || salon.getMember(verdict.autreId) === null;
 }
 
 function raisonInvitation(salon: Room, moiId: string): unknown {
@@ -473,8 +499,9 @@ function lireOffre(c: MatrixClient, salon: Room, moiId: string): Offre | null {
 
 /**
  * Client : accepte une offre. Rejoint la bulle, vérifie qu'elle est chiffrée et bien à 2 (moi et le
- * prestataire qui m'a invité) — sinon la quitte —, refuse les autres offres pour la même demande,
- * puis retire la demande du Mur et l'oublie sur ce téléphone.
+ * prestataire qui m'a invité) — sinon la quitte —, puis la rend tout de suite. Le reste ne fait pas
+ * attendre : les autres offres pour la même demande sont refusées (elles quittent la liste aussitôt),
+ * la demande est oubliée sur ce téléphone et retirée du Mur, le chiffrement est préparé.
  */
 export async function accepterOffre(c: MatrixClient, roomId: string): Promise<void> {
   const salon = salonValide(c, roomId);
@@ -502,9 +529,10 @@ export async function accepterOffre(c: MatrixClient, roomId: string): Promise<vo
     await c.leave(roomId).catch(() => undefined);
     throw new Error('Bulle non chiffrée ou invalide : refusée.');
   }
-  for (const soeur of soeurs) await c.leave(soeur).catch(() => undefined);
-  await retirerDemande(c, offre.ref).catch(() => undefined);
   oublierDemandeLocale();
+  for (const soeur of soeurs) quitterSansBruit(c, soeur);
+  void retirerDemande(c, offre.ref).catch(() => undefined);
+  prechaufferBulle(c, roomId);
 }
 
 /** Charge la liste complète des membres (le client ne charge que ceux qu'il voit passer). */
@@ -750,6 +778,8 @@ export function listerBulles(c: MatrixClient): ResumeBulle[] {
   return c
     .getRooms()
     .map((salon) => {
+      // Bulle que je suis en train de quitter (le serveur n'a pas encore répondu) : plus dans la liste.
+      if (enDepart.has(salon.roomId)) return { salon, r: null };
       if (enDoublon(c, salon, moiId, gardees)) {
         quitterSansBruit(c, salon.roomId);
         return { salon, r: null };
@@ -783,17 +813,38 @@ export async function fermerBullesRefusees(c: MatrixClient): Promise<void> {
   }
 }
 
-/** Appelle `rappel` avec la liste à jour à chaque changement. Rend une fonction qui arrête l'écoute. */
+/** Bulles saines où je suis entré : en attente de l'autre, ou ouvertes (celles dont le chiffrement se prépare). */
+function bullesAChauffer(c: MatrixClient, liste: readonly ResumeBulle[]): Set<string> {
+  return new Set(
+    liste
+      .filter((b) => (b.etat === 'ouverte' || b.etat === 'en-attente') && bulleSaine(c, b.roomId))
+      .map((b) => b.roomId),
+  );
+}
+
+/**
+ * Appelle `rappel` avec la liste à jour à chaque changement. Rend une fonction qui arrête l'écoute.
+ * Une bulle qui devient ouverte (ou en attente de l'autre) pendant l'écoute voit son chiffrement préparé
+ * tout de suite ; celles déjà là au premier tour le sont quand on les ouvre ou qu'on y écrit.
+ */
 export function ecouterBulles(c: MatrixClient, rappel: (b: ResumeBulle[]) => void): () => void {
   let minuterie: ReturnType<typeof setTimeout> | null = null;
   let arrete = false;
+  let dejaVues: ReadonlySet<string> | null = null;
   const prevenir = (): void => {
     if (minuterie !== null || arrete) return;
     minuterie = setTimeout(() => {
       minuterie = null;
       if (arrete) return;
       void fermerBullesRefusees(c);
-      rappel(listerBulles(c));
+      const liste = listerBulles(c);
+      rappel(liste);
+      // Après l'écran : le préchauffage ne retarde jamais l'affichage de la liste.
+      const aChauffer = bullesAChauffer(c, liste);
+      if (dejaVues !== null) {
+        for (const roomId of aChauffer) if (!dejaVues.has(roomId)) prechaufferBulle(c, roomId);
+      }
+      dejaVues = aChauffer;
     }, DELAI_REGROUPEMENT_MS);
   };
   const evenements = [
@@ -859,18 +910,19 @@ async function appareilsDe(c: MatrixClient, userId: string): Promise<string[]> {
  * Anti homme du milieu : au premier échange, retient les appareils de l'autre ; ensuite, signale
  * « nouveau » si l'autre a un appareil inconnu (l'envoi sera alors refusé).
  */
-async function etatAppareils(
-  c: MatrixClient,
-  roomId: string,
-  autreId: string,
-): Promise<'connus' | 'nouveau'> {
-  const actuels = await appareilsDe(c, autreId);
+function comparerAppareils(roomId: string, actuels: readonly string[]): 'connus' | 'nouveau' {
   const connus = lireAppareils()[roomId];
   if (connus === undefined) {
     if (actuels.length > 0) retenirAppareils(roomId, actuels);
     return 'connus';
   }
   return actuels.some((id) => !connus.includes(id)) ? 'nouveau' : 'connus';
+}
+
+/** L'autre participant lu dans l'état io.sia.bulle : une présomption, le verdict complet est refait ensuite. */
+function autrePresume(salon: Room, moiId: string): string | null {
+  const etat = lireEtat(salon);
+  return etat ? (Object.keys(etat.participants).find((id) => id !== moiId) ?? null) : null;
 }
 
 /*
@@ -918,9 +970,17 @@ async function preparerUneFois(c: MatrixClient, roomId: string): Promise<Prepara
   const moiId = moi(c);
   etatSainEnMemoire(salon, moiId);
   if (!(await estChiffree(c, roomId))) throw new Error('Bulle non chiffrée : envoi refusé.');
+  // Liste des membres et appareils de l'autre : deux demandes au serveur indépendantes, parties ensemble
+  // (un aller-retour au lieu de deux). Les appareils sont demandés pour l'autre lu dans l'état de la
+  // bulle ; le verdict complet (2 membres, créateur…) est refait sur la liste chargée, avant de s'en servir.
+  const presume = autrePresume(salon, moiId);
+  const appareils = presume === null ? null : appareilsDe(c, presume);
+  appareils?.catch(() => undefined); // son échec éventuel est relu plus bas, pas ici
   await chargerMembres(salon);
   const autreId = await exigerSaine(c, roomId, examinerBulle(salon, moiId));
-  return { autreId, appareils: await etatAppareils(c, roomId, autreId) };
+  const actuels =
+    appareils !== null && autreId === presume ? await appareils : await appareilsDe(c, autreId);
+  return { autreId, appareils: comparerAppareils(roomId, actuels) };
 }
 
 /** Lance (ou rejoint) la préparation de la bulle ; le résultat n'est gardé que si la bulle est surveillée. */
@@ -946,9 +1006,74 @@ function oublierPreparation(cle: string): void {
   versions.set(cle, (versions.get(cle) ?? 0) + 1);
 }
 
+/*
+ * Préchauffage du chiffrement : le premier message d'une bulle coûte cher (clés de l'autre, sessions Olm,
+ * envoi de la clé du salon : plusieurs allers-retours). `prepareToEncrypt` fait ce travail à l'avance, en
+ * arrière-plan. Jamais avant que les vérifications soient passées : bulle chiffrée, à 2, appareils de
+ * l'autre connus (sinon la clé partirait vers un appareil que l'utilisateur n'a pas encore accepté).
+ */
+
+/** Dernier partage anticipé demandé, par client puis par bulle (limite : un toutes les 3 s). */
+const dernierChauffage = new WeakMap<MatrixClient, Map<string, number>>();
+
+/** Vrai (et note l'instant) si le dernier partage anticipé de cette bulle date de plus de 3 s. */
+function chauffagePermis(c: MatrixClient, roomId: string, maintenant: number): boolean {
+  const parBulle = dernierChauffage.get(c) ?? new Map<string, number>();
+  const dernier = parBulle.get(roomId);
+  if (dernier !== undefined && maintenant - dernier < PAUSE_CHAUFFAGE_MS) return false;
+  if (parBulle.size >= BULLES_MAX_CHAUFFAGE) parBulle.clear();
+  parBulle.set(roomId, maintenant);
+  dernierChauffage.set(c, parBulle);
+  return true;
+}
+
+/** Partage la clé du salon à l'avance si la préparation `p` est sûre et toujours vraie en mémoire. Jamais d'erreur. */
+function chaufferSiSur(c: MatrixClient, roomId: string, p: Preparation): void {
+  try {
+    if (p.appareils !== 'connus') return;
+    const salon = salonValide(c, roomId);
+    const verdict = etatSainEnMemoire(salon, moi(c));
+    if (verdict.statut !== 'saine' || verdict.autreId !== p.autreId) return;
+    const crypto = c.getCrypto();
+    if (!crypto || !chauffagePermis(c, roomId, Date.now())) return;
+    crypto.prepareToEncrypt(salon);
+  } catch {
+    // Préchauffage facultatif : jamais d'erreur, jamais bloquant.
+  }
+}
+
+/** Prépare la bulle (vérifications), puis préchauffe si tout est sûr. Ne rejette jamais, ne bloque pas. */
+function preparerEtChauffer(c: MatrixClient, roomId: string): void {
+  const cle = clePreparation(c, roomId);
+  const version = versions.get(cle) ?? 0;
+  void preparer(c, roomId)
+    .then((p) => {
+      // Un changement arrivé pendant l'attente rend ce résultat caduc : le suivant s'en occupera.
+      if ((versions.get(cle) ?? 0) === version) chaufferSiSur(c, roomId, p);
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * Prépare le chiffrement d'une bulle pour que le prochain message parte en un seul aller-retour (clé du
+ * salon partagée à l'avance). À appeler quand la bulle s'ouvre, devient ouverte, vient d'être acceptée ou
+ * à la première frappe. Ne bloque jamais, ne rejette jamais ; ne fait rien si la bulle n'est pas sûre.
+ */
+export function prechaufferBulle(c: MatrixClient, roomId: string): void {
+  try {
+    if (!estIdSalon(roomId)) return;
+    const connue = preparationConnue(c, roomId);
+    if (connue) chaufferSiSur(c, roomId, connue);
+    else preparerEtChauffer(c, roomId);
+  } catch {
+    // Préchauffage facultatif : jamais d'erreur, jamais bloquant.
+  }
+}
+
 /**
  * Surveille la bulle ouverte à l'écran : prépare les vérifications tout de suite, puis les refait à
  * chaque changement d'état, de membres ou d'appareils. Rend la fonction qui arrête la surveillance.
+ * Chaque préparation réussie préchauffe le chiffrement (voir plus haut).
  */
 export function surveillerBulle(c: MatrixClient, roomId: string): () => void {
   if (!estIdSalon(roomId)) return () => undefined;
@@ -956,7 +1081,7 @@ export function surveillerBulle(c: MatrixClient, roomId: string): () => void {
   surveillances.set(cle, (surveillances.get(cle) ?? 0) + 1);
   const rafraichir = (): void => {
     oublierPreparation(cle);
-    void preparer(c, roomId).catch(() => undefined);
+    preparerEtChauffer(c, roomId);
   };
   const surEtat = (ev: MatrixEvent): void => {
     if (ev.getRoomId() === roomId) rafraichir();

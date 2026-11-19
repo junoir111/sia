@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
@@ -29,11 +29,20 @@ export function FicheDemande() {
   const { moi, userId } = useMoi();
   const [envoi, setEnvoi] = useState(false);
   const [bandeau, setBandeau] = useState<string | null>(null);
+  // Faux si on a quitté la fiche pendant l'envoi : on ne ramène alors personne en arrière.
+  const ici = useRef(false);
+  useEffect(() => {
+    ici.current = true;
+    return () => {
+      ici.current = false;
+    };
+  }, []);
 
   const retour = cheminRetourFiche(metierOrigine, quartier);
   const demande = vue.demandes.find((d) => d.eventId === eventId && d.fin > vue.maintenant);
   const reseauKo = etat === 'erreur-reseau' || vue.erreur;
 
+  /** Le bouton dit « Réponse envoyée… » au toucher ; le serveur confirme ensuite (sinon : message, bouton rendu). */
   async function dAccord() {
     if (!client || !moi || !demande || envoi) return;
     setEnvoi(true);
@@ -52,6 +61,7 @@ export function FicheDemande() {
       setBandeau(familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME);
       return;
     }
+    if (!ici.current) return;
     // Bulle déjà ouverte avec ce client : on y va directement.
     if (resultat.reutilisee) navigate(cheminBulle(resultat.roomId));
     else navigate(retour, { state: etatSucces(`Réponse envoyée à ${pseudo}`) });
@@ -94,7 +104,10 @@ export function FicheDemande() {
         {bandeau && <Bandeau message={bandeau} />}
         {peutRepondre && (
           <>
-            <BoutonPrincipal chargement={envoi} onClick={() => void dAccord()}>
+            <BoutonPrincipal
+              envoye={envoi ? 'Réponse envoyée…' : undefined}
+              onClick={() => void dAccord()}
+            >
               D'accord ?
             </BoutonPrincipal>
             <p className="fiche__note">Ta réponse part à ce client seul. Il choisit ensuite.</p>

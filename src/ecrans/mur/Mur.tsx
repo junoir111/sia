@@ -6,13 +6,16 @@ import { grilleMur } from '../../logique/mur';
 import { pseudoPropose } from '../../logique/profil';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonRond } from '../../ui/BoutonRond';
+import { IndicateurMiseAJour } from '../../ui/IndicateurMiseAJour';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { TuileMetier } from '../../ui/TuileMetier';
 import { IconeLoupe } from '../../ui/icones';
+import { useGlisse } from '../../ui/useGlisse';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { MonCompte } from './MonCompte';
 import { useMoi } from './useMoi';
 import { useMur } from './useMur';
+import { useRattrapage } from './useRattrapage';
 import { effacerPosition, lirePosition, memoriserPosition } from './position-mur';
 import './mur.css';
 
@@ -25,6 +28,8 @@ export function Mur() {
   const { client, etat } = useMatrix();
   const vue = useMur(client);
   const bulles = useBulles(client);
+  const rattrape = useRattrapage(client);
+  const grille = useGlisse<HTMLUListElement>();
   const { moi, userId, chargement } = useMoi();
   // Au retour d'une page fille, on retrouve le texte tapé (et plus bas, la position).
   const [position] = useState(() => lirePosition());
@@ -106,9 +111,9 @@ export function Mur() {
     );
   } else
     contenu = (
-      <ul className="mur__grille">
+      <ul className="mur__grille" ref={grille}>
         {tuiles.map((t) => (
-          <li key={t.metier} onClickCapture={memoriser}>
+          <li key={t.metier} data-glisse={t.metier} onClickCapture={memoriser}>
             <TuileMetier tuile={t} to={cheminListeMetier(t.metier, quartierLien)} />
           </li>
         ))}
@@ -119,6 +124,7 @@ export function Mur() {
     <main className="ecran mur">
       <header className="mur__entete">
         <h1 className="mur__titre">Le Mur</h1>
+        <IndicateurMiseAJour actif={rattrape} />
         <button
           type="button"
           className="mur__compte"

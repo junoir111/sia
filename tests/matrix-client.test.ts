@@ -24,6 +24,8 @@ vi.mock('matrix-js-sdk', async (original) => {
         }),
         startClient: vi.fn(async () => undefined),
         stopClient: vi.fn(),
+        retryImmediately: vi.fn(() => false),
+        getSyncState: vi.fn(() => 'SYNCING'),
       };
       faux.clients.push(client);
       faux.options.push(opts);
@@ -33,13 +35,20 @@ vi.mock('matrix-js-sdk', async (original) => {
 });
 
 import { ClientEvent, HttpApiEvent, SyncState } from 'matrix-js-sdk';
-import { arreterClient, clientActif, demarrerClient } from '../src/matrix/client';
+import {
+  PAUSE_RECHARGEMENT_MS,
+  arreterClient,
+  clientActif,
+  demarrerClient,
+  rechargerAppli,
+} from '../src/matrix/client';
 
 type Faux = {
   emit: (nom: string, ...a: unknown[]) => void;
   initRustCrypto: ReturnType<typeof vi.fn>;
   startClient: ReturnType<typeof vi.fn>;
   stopClient: ReturnType<typeof vi.fn>;
+  retryImmediately: ReturnType<typeof vi.fn>;
 };
 
 const SESSION = { userId: '@puma:sia.tail94dc60.ts.net', accessToken: 'jeton', deviceId: 'APP' };
@@ -176,5 +185,99 @@ describe('demarrerClient', () => {
     await pret();
     expect(await a).toBe(await b);
     expect(faux.clients).toHaveLength(1);
+  });
+});
+
+describe('réveil rapide du client démarré', () => {
+  async function demarre(): Promise<Faux> {
+    const promesse = demarrerClient(SESSION);
+    await pret();
+    await promesse;
+    return dernier();
+  }
+
+  it('le retour de l’appli (resume, page visible, réseau) relance la synchro ; arrêté, plus rien', async () => {
+    const c = await demarre();
+    document.dispatchEvent(new Event('resume'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('online'));
+    expect(c.retryImmediately).toHaveBeenCalledTimes(3);
+    arreterClient();
+    document.dispatchEvent(new Event('resume'));
+    window.dispatchEvent(new Event('online'));
+    expect(c.retryImmediately).toHaveBeenCalledTimes(3);
+  });
+
+  it('un client jamais devenu actif (démarrage annulé) n’est pas surveillé', async () => {
+    const autre = { ...SESSION, userId: '@lion:sia.tail94dc60.ts.net', deviceId: 'APP2' };
+    const premier = demarrerClient(SESSION);
+    await vi.waitFor(() => expect(dernier()?.startClient).toHaveBeenCalled());
+    const ancien = dernier();
+    const second = demarrerClient(autre);
+    await vi.waitFor(() => expect(faux.clients).toHaveLength(2));
+    ancien.emit(ClientEvent.Sync, SyncState.Prepared);
+    await expect(premier).rejects.toThrow();
+    document.dispatchEvent(new Event('resume'));
+    expect(ancien.retryImmediately).not.toHaveBeenCalled();
+    const nouveau = dernier();
+    await vi.waitFor(() => expect(nouveau.startClient).toHaveBeenCalled());
+    nouveau.emit(ClientEvent.Sync, SyncState.Prepared);
+    await second;
+    document.dispatchEvent(new Event('resume'));
+    expect(nouveau.retryImmediately).toHaveBeenCalledTimes(1);
+    expect(ancien.retryImmediately).not.toHaveBeenCalled();
+  });
+
+  it('le client reçoit un fetch qui laisse passer les requêtes ordinaires', async () => {
+    const reponse = new Response('{}');
+    const reseau = vi.fn(async () => reponse);
+    vi.stubGlobal('fetch', reseau);
+    try {
+      await demarre();
+      const { fetchFn } = faux.options[0] as { fetchFn: typeof fetch };
+      const url = 'https://sia.tail94dc60.ts.net/_matrix/client/v3/keys/query';
+      await expect(fetchFn(url, { method: 'POST' })).resolves.toBe(reponse);
+      expect(reseau).toHaveBeenCalledWith(url, { method: 'POST' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('rechargerAppli (dernier recours du chien de garde)', () => {
+  const recharger = vi.fn();
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    recharger.mockClear();
+    vi.stubGlobal('location', { ...window.location, reload: recharger });
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.UTC(2026, 10, 18, 12, 0, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('recharge la page, mais au plus une fois toutes les 5 minutes (pas de boucle)', () => {
+    rechargerAppli();
+    expect(recharger).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(PAUSE_RECHARGEMENT_MS - 1000);
+    rechargerAppli();
+    expect(recharger).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2000);
+    rechargerAppli();
+    expect(recharger).toHaveBeenCalledTimes(2);
+  });
+
+  it('une valeur illisible dans le stockage n’empêche pas de recharger, et rien ne remonte', () => {
+    sessionStorage.setItem('sia.rechargement', 'pas un nombre');
+    expect(() => rechargerAppli()).not.toThrow();
+    expect(recharger).toHaveBeenCalledTimes(1);
+    recharger.mockImplementation(() => {
+      throw new Error('pas de page');
+    });
+    vi.advanceTimersByTime(PAUSE_RECHARGEMENT_MS + 1000);
+    expect(() => rechargerAppli()).not.toThrow();
   });
 });

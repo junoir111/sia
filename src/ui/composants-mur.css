@@ -287,9 +287,38 @@
   text-decoration: none;
 }
 
+/* --- « Mise à jour… » : zone toujours présente à droite du titre, texte qui arrive après 400 ms --- */
+.maj {
+  flex: 1;
+  min-width: 0;
+  padding: 0 12px;
+  overflow: hidden;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  line-height: 20px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maj__texte {
+  animation: maj-arrive 240ms cubic-bezier(0.16, 1, 0.3, 1) 400ms backwards;
+}
+
+@keyframes maj-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tuile,
   .rond-flottant {
     transition: none;
+  }
+
+  /* Pas de fondu, mais le texte garde son délai : une mise à jour rapide ne clignote pas. */
+  .maj__texte {
+    animation-duration: 1ms;
   }
 }

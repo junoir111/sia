@@ -1,11 +1,15 @@
 /* Bandeaux M1 / M2 — maquettes M1-prestataire-notification.jpg et M2-client-reponses.jpg.
-   Carte de 104 px de haut, 8 px des bords, posée sous la barre d'état. */
+   Cartes de 104 px de haut, 8 px des bords, posées sous la barre d'état. Elles s'empilent
+   (la plus récente en haut, 8 px entre deux) ; la ligne Oui / Non est dans composants.css (.reponse). */
 .notif {
   position: fixed;
   top: max(44px, calc(env(safe-area-inset-top) + 8px));
   right: 0;
   left: 0;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
@@ -31,27 +35,6 @@
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.notif__rangee {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.notif__question {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: var(--sia-accent);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 20px;
-}
-
-.notif__question--erreur {
-  color: var(--sia-alerte);
-  font-size: var(--sia-aide);
 }
 
 @keyframes notif-arrive {

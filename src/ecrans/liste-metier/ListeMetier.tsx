@@ -6,9 +6,12 @@ import { libelleModalite, listeMetier } from '../../logique/mur';
 import { Bandeau } from '../../ui/Bandeau';
 import { BandeauSucces } from '../../ui/BandeauSucces';
 import { CartePrestataire } from '../../ui/CartePrestataire';
+import { IndicateurMiseAJour } from '../../ui/IndicateurMiseAJour';
 import { LienRetour } from '../../ui/LienRetour';
+import { useGlisse } from '../../ui/useGlisse';
 import { lireSucces } from '../mur/navigation-mur';
 import { useMur } from '../mur/useMur';
+import { useRattrapage } from '../mur/useRattrapage';
 import './liste-metier.css';
 
 const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
@@ -22,6 +25,8 @@ export function ListeMetier() {
   const navigate = useNavigate();
   const { client, etat } = useMatrix();
   const vue = useMur(client);
+  const rattrape = useRattrapage(client);
+  const cartes = useGlisse<HTMLUListElement>();
   const [succes] = useState(() => lireSucces(location.state));
 
   // Le message ne sert qu'une fois : il s'efface de l'état de navigation (pas de retour avec le message).
@@ -48,9 +53,9 @@ export function ListeMetier() {
             <h2 id="liste-dispos" className="liste__section">
               Disponibles maintenant · {prestataires.length}
             </h2>
-            <ul className="liste__cartes">
+            <ul className="liste__cartes" ref={cartes}>
               {prestataires.map((p) => (
-                <li key={p.eventId}>
+                <li key={p.eventId} data-glisse={p.eventId}>
                   <CartePrestataire
                     pseudo={p.pseudo}
                     info={p.modalite ? `${p.zone} · ${libelleModalite(p.modalite)}` : p.zone}
@@ -70,6 +75,7 @@ export function ListeMetier() {
       <header className="entete-page">
         <LienRetour to={cheminMur(quartier)} />
         <h1 className="entete-page__titre">{titre}</h1>
+        <IndicateurMiseAJour actif={rattrape} />
       </header>
       {succes && (
         <BandeauSucces message={succes}>

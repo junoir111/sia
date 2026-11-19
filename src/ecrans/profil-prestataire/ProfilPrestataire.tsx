@@ -36,6 +36,7 @@ import { PastilleChoix } from '../../ui/PastilleChoix';
 import { IconeCrayon } from '../../ui/icones';
 import { signalerDisponible } from '../bandeau/signal';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
+import { memoriserMoi } from '../mur/useMoi';
 import { familleErreur } from '../profil-client/branchements';
 import './profil-prestataire.css';
 
@@ -86,9 +87,11 @@ export function ProfilPrestataire() {
   const [erreurs, setErreurs] = useState<ErreursProfil>({});
   const [bandeau, setBandeau] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
-  const [envoi, setEnvoi] = useState(false);
   // undefined : pas encore touché SIA ici ; l'état vient alors du Mur (ou du téléphone en secours).
   const [choixVisible, setVisibleA] = useState<string | null | undefined>(undefined);
+  // Ce que le bouton montre PENDANT que le serveur confirme (affichage immédiat). Quand le serveur refuse,
+  // on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
+  const [attendu, setAttendu] = useState<{ visibleA: string | null } | null>(null);
   const [zoneSecours, setZoneSecours] = useState<string | null>(null);
   const [modifie, setModifie] = useState(false);
   const [eteint, setEteint] = useState(false);
@@ -98,6 +101,14 @@ export function ProfilPrestataire() {
   const [photoOccupee, setPhotoOccupee] = useState(false);
   const champPseudo = useRef<HTMLInputElement>(null);
   const idPhrase = useId();
+  // Faux si on a quitté la page pendant l'envoi : on ne ramène alors personne au Mur.
+  const ici = useRef(false);
+  useEffect(() => {
+    ici.current = true;
+    return () => {
+      ici.current = false;
+    };
+  }, []);
 
   const urlPhoto = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(
@@ -147,7 +158,9 @@ export function ProfilPrestataire() {
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
   const statut = client ? monStatutActif(client) : null;
-  const visibleA = choixVisible !== undefined ? choixVisible : (statut?.statut.zone ?? zoneSecours);
+  const reel = choixVisible !== undefined ? choixVisible : (statut?.statut.zone ?? zoneSecours);
+  const envoi = attendu !== null;
+  const visibleA = attendu ? attendu.visibleA : reel;
   const allume = visibleA !== null;
   const complet = profilComplet(saisie);
 
@@ -173,16 +186,16 @@ export function ProfilPrestataire() {
     else setBandeau(MESSAGES[famille]);
   }
 
+  /** Le bouton repasse au gris tout de suite ; si le serveur refuse, il redevient vert avec un message. */
   async function eteindre() {
-    setEnvoi(true);
+    setAttendu({ visibleA: null });
     try {
       await retirerStatut(exigerClient(client));
     } catch (e) {
-      setEnvoi(false);
+      setAttendu(null);
       echecReseau(e);
       return;
     }
-    setEnvoi(false);
     try {
       ecrireDisponible(false);
     } catch {
@@ -190,6 +203,7 @@ export function ProfilPrestataire() {
     }
     setVisibleA(null);
     setEteint(true);
+    setAttendu(null);
   }
 
   async function toucherSia() {
@@ -204,18 +218,21 @@ export function ProfilPrestataire() {
       setErreurs(verifie.erreurs);
       return;
     }
-    setEnvoi(true);
+    // Le bouton passe au vert tout de suite ; si le serveur refuse, il revient à son état d'avant.
+    setAttendu({ visibleA: verifie.profil.zone });
     const resultat = await enregistrerProfil(session, verifie.profil).catch(() => ({
       ok: false as const,
       erreur: 'inconnue' as const,
     }));
     if (!resultat.ok) {
-      setEnvoi(false);
+      setAttendu(null);
       if (resultat.erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
       else setBandeau(MESSAGES[resultat.erreur]);
       return;
     }
     const { pseudo, metier, zone, modalite, services } = verifie.profil;
+    // Profil enregistré : les écrans suivants (Mur, fiches) le savent tout de suite.
+    memoriserMoi(session.userId, { role: 'prestataire', pseudo, zone });
     try {
       await publierStatut(exigerClient(client), {
         pseudo,
@@ -226,11 +243,10 @@ export function ProfilPrestataire() {
         fin: Date.now() + DUREE_MAX_ANNONCE_MS,
       });
     } catch (e) {
-      setEnvoi(false);
+      setAttendu(null);
       echecReseau(e);
       return;
     }
-    setEnvoi(false);
     try {
       ecrireDisponible(true);
     } catch {
@@ -240,7 +256,8 @@ export function ProfilPrestataire() {
     setModifie(false);
     setEteint(false);
     setVisibleA(verifie.profil.zone);
-    navigate(cheminMur());
+    setAttendu(null);
+    if (ici.current) navigate(cheminMur());
   }
 
   async function choisirPhoto(fichier: File) {
@@ -277,11 +294,11 @@ export function ProfilPrestataire() {
   const pseudoEnSaisie = edition || focus === 'pseudo' || saisie.pseudo.trim() === '';
   const metierEnSaisie = edition || focus === 'metier' || saisie.metier.trim() === '';
 
+  // La phrase suit le bouton, sans attendre le serveur (« Tu es visible… » dès le toucher).
   let phrase = '';
-  if (envoi) phrase = 'Enregistrement…';
-  else if (allume && modifie) phrase = 'Touche SIA pour enregistrer.';
+  if (allume && modifie && !envoi) phrase = 'Touche SIA pour enregistrer.';
   else if (allume) phrase = `Tu es visible à ${visibleA}.`;
-  else if (eteint) phrase = "Tu n'es plus visible.";
+  else if (eteint || envoi) phrase = "Tu n'es plus visible.";
 
   const erreurTitre = erreurs.pseudo ?? erreurs.metier;
 

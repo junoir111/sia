@@ -264,27 +264,38 @@ describe('ecouterMur', () => {
     const c = fauxClient([m]);
     const rappel = vi.fn();
     const arreter = ecouterMur(comme(c), rappel);
-    await vi.advanceTimersByTimeAsync(0);
+    // Affichage immédiat avec ce que le client a déjà, puis état complet une fois l'historique chargé.
     expect(rappel).toHaveBeenCalledTimes(1);
-    expect(rappel.mock.calls[0]?.[0].statuts).toHaveLength(1);
-    expect(rappel.mock.calls[0]?.[0].demandes).toEqual([]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rappel).toHaveBeenCalledTimes(2);
+    expect(rappel.mock.calls[1]?.[0].statuts).toHaveLength(1);
+    expect(rappel.mock.calls[1]?.[0].demandes).toEqual([]);
 
     const nouvelle = annonce('palmier', TIERS, MAINTENANT, '$d1');
     evenements.push(nouvelle);
     c.emit(RoomEvent.Timeline, nouvelle, m, false);
     c.emit(RoomEvent.Timeline, nouvelle, m, false);
     await vi.advanceTimersByTimeAsync(100);
-    expect(rappel).toHaveBeenCalledTimes(2);
-    expect(rappel.mock.calls[1]?.[0].demandes).toHaveLength(1);
+    expect(rappel).toHaveBeenCalledTimes(3);
+    expect(rappel.mock.calls[2]?.[0].demandes).toHaveLength(1);
 
     c.emit(RoomEvent.Timeline, nouvelle, salon({ ...baseAutreSalon() }), false);
     await vi.advanceTimersByTimeAsync(100);
-    expect(rappel).toHaveBeenCalledTimes(2);
+    expect(rappel).toHaveBeenCalledTimes(3);
 
     arreter();
     c.emit(RoomEvent.Timeline, nouvelle, m, false);
     await vi.advanceTimersByTimeAsync(100);
-    expect(rappel).toHaveBeenCalledTimes(2);
+    expect(rappel).toHaveBeenCalledTimes(3);
+  });
+
+  it("Mur vide au démarrage : pas d'affichage immédiat (évite un faux « personne »)", async () => {
+    const c = fauxClient([mur([])]);
+    const rappel = vi.fn();
+    ecouterMur(comme(c), rappel);
+    expect(rappel).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rappel).toHaveBeenCalledTimes(1);
   });
 
   it("signale l'échec de la première lecture", async () => {

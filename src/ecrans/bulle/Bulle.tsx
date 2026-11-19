@@ -13,6 +13,7 @@ import {
   accepterNouvelAppareil,
   bulleSaine,
   envoyerMessage,
+  prechaufferBulle,
   reessayerMessage,
   signalerEcriture,
   silenceRadio,
@@ -201,6 +202,8 @@ export function Bulle() {
     if (!vide && maintenant - dernierSignal.current < RAPPEL_ECRITURE_MS) return;
     dernierSignal.current = vide ? 0 : maintenant;
     void signalerEcriture(client, roomId, !vide).catch(() => undefined);
+    // 1re frappe (puis au plus toutes les 3 s) : le chiffrement se prépare pendant qu'on écrit.
+    if (!vide) prechaufferBulle(client, roomId);
   }
 
   /** Échec avant l'envoi : le texte revient dans le champ (s'il est resté vide). */

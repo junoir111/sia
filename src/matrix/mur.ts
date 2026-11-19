@@ -520,6 +520,13 @@ export function ecouterMur(
   };
   c.on(RoomEvent.Timeline, prevenir);
   c.on(RoomEvent.Redaction, prevenir);
+  // Démarrage à froid : ce que le client a déjà reçu s'affiche tout de suite (si le Mur n'est pas vide),
+  // l'historique complet, plus long à charger, complète ensuite.
+  const dejaLa = salonMur(c) ?? c.getRooms().find((r) => estMur(r)) ?? null;
+  if (dejaLa) {
+    const vue = instantane(dejaLa, Date.now());
+    if (vue.statuts.length > 0 || vue.demandes.length > 0) rappel(vue);
+  }
   murCharge(c, DUREE_MAX_ANNONCE_MS).then(emettre, (erreur: unknown) => auxErreur?.(erreur));
   return () => {
     arrete = true;

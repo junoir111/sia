@@ -11,6 +11,7 @@ import {
   bulleSaine,
   envoyerMessage,
   listerBulles,
+  prechaufferBulle,
   reessayerMessage,
   signalerEcriture,
   silenceRadio,
@@ -41,6 +42,7 @@ vi.mock('../src/matrix/bulles', async (importOriginal) => ({
   ecouterBulles: vi.fn(() => () => undefined),
   listerBulles: vi.fn(),
   envoyerMessage: vi.fn(),
+  prechaufferBulle: vi.fn(),
   reessayerMessage: vi.fn(),
   signalerEcriture: vi.fn(),
   silenceRadio: vi.fn(),
@@ -155,6 +157,7 @@ describe('Écran Bulle (M4)', () => {
     vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
     vi.mocked(listerBulles).mockReset().mockReturnValue([resume()]);
     vi.mocked(envoyerMessage).mockReset().mockResolvedValue('$m4');
+    vi.mocked(prechaufferBulle).mockReset();
     vi.mocked(signalerEcriture).mockReset().mockResolvedValue(undefined);
     vi.mocked(silenceRadio).mockReset().mockResolvedValue(undefined);
     vi.mocked(marquerAffiche).mockReset();
@@ -265,6 +268,28 @@ describe('Écran Bulle (M4)', () => {
     await vi.waitFor(() => expect(champ()).toHaveValue(''));
     expect(envoyerMessage).toHaveBeenCalledWith(client, SALON, 'D’accord.');
     expect(signalerEcriture).toHaveBeenLastCalledWith(client, SALON, false);
+  });
+
+  it('la 1re frappe prépare le chiffrement, puis pas de rafale pendant la frappe', () => {
+    afficher();
+    fireEvent.change(champ(), { target: { value: 'S' } });
+    expect(prechaufferBulle).toHaveBeenCalledTimes(1);
+    expect(prechaufferBulle).toHaveBeenCalledWith(client, SALON);
+    fireEvent.change(champ(), { target: { value: 'Sa' } });
+    fireEvent.change(champ(), { target: { value: 'Sal' } });
+    expect(prechaufferBulle).toHaveBeenCalledTimes(1);
+    // Champ vidé puis nouvelle frappe : c'est de nouveau une première frappe.
+    fireEvent.change(champ(), { target: { value: '' } });
+    expect(prechaufferBulle).toHaveBeenCalledTimes(1);
+    fireEvent.change(champ(), { target: { value: 'L' } });
+    expect(prechaufferBulle).toHaveBeenCalledTimes(2);
+  });
+
+  it('rien n’est préparé quand on ne peut pas écrire (en attente de l’autre, bulle pas sûre)', () => {
+    vi.mocked(listerBulles).mockReturnValue([resume({ etat: 'en-attente' })]);
+    afficher();
+    fireEvent.change(champ(), { target: { value: 'Salut' } });
+    expect(prechaufferBulle).not.toHaveBeenCalled();
   });
 
   it('envoi impossible : bandeau, le texte reste', async () => {

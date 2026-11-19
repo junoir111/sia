@@ -9,12 +9,14 @@ import { logger as journalSdk, type Logger } from 'matrix-js-sdk/lib/logger';
 import { ADRESSE_SERVEUR } from '../config';
 import type { Session } from './auth';
 import { arreterEphemere, reprendreEffacements } from './ephemere';
+import { suivreSynchro, surveillerSynchro } from './reveil';
 import { estSession } from './session';
 
 /*
  * UN seul client Matrix pour toute l'appli (contrat « src/matrix/ », client.ts).
  * - Chiffrement Rust (Olm/Megolm) avec sa base IndexedDB propre à SIA (préfixe « sia-crypto »).
  * - Aucun journal du SDK dans la console : il pourrait contenir des identifiants ou des jetons.
+ * - Réveil rapide : au retour de l'appli, du réseau ou en cas de silence de la synchro (reveil.ts).
  */
 
 export const PREFIXE_BASE_CRYPTO = 'sia-crypto';
@@ -45,6 +47,28 @@ let actif: MatrixClient | null = null;
 let demarrage: { cle: string; promesse: Promise<MatrixClient> } | null = null;
 /** Augmente à chaque nouveau démarrage ou arrêt : un démarrage dépassé ne devient jamais le client actif. */
 let generation = 0;
+/** Arrête la surveillance de la synchro du client actif (reveil.ts). */
+let arretReveil: (() => void) | null = null;
+
+/** Entre deux rechargements automatiques : pas de boucle si le serveur reste injoignable. */
+export const PAUSE_RECHARGEMENT_MS = 5 * 60_000;
+const CLE_RECHARGEMENT = 'sia.rechargement';
+
+/**
+ * Dernier recours du chien de garde : recharger l'appli (la session et les clés de chiffrement restent sur
+ * l'appareil). On ne peut pas simplement arrêter puis relancer le client : arrêter coupe le chiffrement
+ * pour de bon. Au plus une fois toutes les 5 minutes.
+ */
+export function rechargerAppli(): void {
+  try {
+    const dernier = Number(sessionStorage.getItem(CLE_RECHARGEMENT));
+    if (Date.now() - dernier < PAUSE_RECHARGEMENT_MS) return;
+    sessionStorage.setItem(CLE_RECHARGEMENT, String(Date.now()));
+    window.location.reload();
+  } catch {
+    // Pas de page à recharger (tests) ou stockage refusé : la prochaine intervention réessaiera.
+  }
+}
 
 function cleSession(s: Session): string {
   return `${s.userId}
@@ -163,14 +187,18 @@ async function preparerChiffrement(c: MatrixClient, session: Session): Promise<v
   }
 }
 
-async function lancer(session: Session): Promise<MatrixClient> {
+async function lancer(
+  session: Session,
+): Promise<{ client: MatrixClient; couperSynchro: () => void }> {
   fairTaireSdk();
+  const suivi = suivreSynchro();
   const c = createClient({
     baseUrl: ADRESSE_SERVEUR,
     accessToken: session.accessToken,
     userId: session.userId,
     deviceId: session.deviceId,
     logger: silence,
+    fetchFn: suivi.fetchFn,
   });
   try {
     await preparerChiffrement(c, session);
@@ -181,7 +209,7 @@ async function lancer(session: Session): Promise<MatrixClient> {
     c.stopClient();
     throw erreur;
   }
-  return c;
+  return { client: c, couperSynchro: suivi.couperSynchro };
 }
 
 /**
@@ -199,13 +227,14 @@ export async function demarrerClient(session: Session): Promise<MatrixClient> {
   arreterClient();
   const moi = generation;
   const promesse = lancer(session)
-    .then((c) => {
+    .then(({ client: c, couperSynchro }) => {
       if (moi !== generation) {
         c.stopClient();
         throw new Error('Démarrage annulé : une autre session a été demandée.');
       }
       actif = c;
       reprendreEffacements(c);
+      arretReveil = surveillerSynchro(c, { couperSynchro, redemarrer: rechargerAppli });
       return c;
     })
     .finally(() => {
@@ -224,6 +253,8 @@ export function clientActif(): MatrixClient | null {
 export function arreterClient(): void {
   generation += 1;
   demarrage = null;
+  arretReveil?.();
+  arretReveil = null;
   arreterEphemere();
   actif?.stopClient();
   actif = null;

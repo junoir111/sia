@@ -66,6 +66,12 @@ const ETAT_CLIENT = {
 };
 const INTRUS = '@intrus:sia.tail94dc60.ts.net';
 const RAISON = 'puma (Nzeng) dit oui [ref:$dem]';
+const SOEUR_LENTE = '!soeur-lente:sia.tail94dc60.ts.net';
+
+/** Laisse finir ce qui tourne en arrière-plan (aucun réseau : tout est simulé). */
+async function laisserFinir(): Promise<void> {
+  for (let i = 0; i < 40; i += 1) await Promise.resolve();
+}
 
 function etatChiffre(
   etatBulle: unknown = ETAT_BULLE,
@@ -205,9 +211,50 @@ describe('accepterOffre', () => {
     await accepterOffre(comme(c), BULLE);
     expect(c.joinRoom).toHaveBeenCalledWith(BULLE);
     expect(c.leave.mock.calls).toEqual([['!b2:x']]);
-    // Le choix est fait : la demande quitte le Mur et ce téléphone.
-    expect(c.redactEvent).toHaveBeenCalledWith(MUR, '$dem');
+    // Le choix est fait : la demande quitte ce téléphone tout de suite, puis le Mur (en arrière-plan).
     expect(localStorage.getItem('sia.demande')).toBeNull();
+    await vi.waitFor(() => expect(c.redactEvent).toHaveBeenCalledWith(MUR, '$dem'));
+  });
+
+  /** Client prêt à accepter BULLE, avec une offre sœur lente à quitter (identifiant à elle) et la demande du Mur. */
+  function clientAvecSoeurLente() {
+    const choisie = invitation(BULLE, 'puma (Nzeng) dit oui [ref:$dem]');
+    const soeur = invitation(SOEUR_LENTE, 'lion (Owendo) dit oui [ref:$dem]');
+    const c = fauxClient([murAvecDemande(MOI), choisie, soeur], true, { [AUTRE]: ['TEL1'] });
+    localStorage.setItem('sia.demande', JSON.stringify({ eventId: '$dem', demande: DEMANDE }));
+    c.joinRoom.mockImplementation(async (id: string) => {
+      if (id !== BULLE) return c.salons[0] as (typeof c.salons)[number];
+      c.salons[1] = bulleClient();
+      return c.salons[1];
+    });
+    return c;
+  }
+
+  it('rend la main sans attendre le départ des offres sœurs ni le retrait de la demande du Mur', async () => {
+    const c = clientAvecSoeurLente();
+    let departFini: () => void = () => undefined;
+    c.leave.mockImplementation(
+      () =>
+        new Promise((fini) => {
+          departFini = () => fini({});
+        }),
+    );
+    c.redactEvent.mockImplementation(() => new Promise(() => undefined));
+    await accepterOffre(comme(c), BULLE);
+    expect(c.leave.mock.calls).toEqual([[SOEUR_LENTE]]);
+    expect(localStorage.getItem('sia.demande')).toBeNull();
+    // L'offre refusée n'est plus dans la liste, même si le serveur n'a pas encore répondu.
+    expect(listerBulles(comme(c)).map((b) => b.roomId)).toEqual([BULLE]);
+    departFini();
+    await laisserFinir();
+  });
+
+  it('prépare le chiffrement de la bulle acceptée (le 1er message partira en un aller-retour)', async () => {
+    const c = clientAvecSoeurLente();
+    await accepterOffre(comme(c), BULLE);
+    await laisserFinir();
+    expect(c.prepareToEncrypt).toHaveBeenCalledTimes(1);
+    expect(c.prepareToEncrypt).toHaveBeenCalledWith(c.salons[1]);
   });
 
   it('refuse (et quitte) une bulle avec un 3e membre, un participant étranger ou un autre créateur', async () => {

@@ -14,10 +14,13 @@ import { FichePrestataire } from '../src/ecrans/fiche-prestataire/FichePrestatai
 import { ListeMetier } from '../src/ecrans/liste-metier/ListeMetier';
 import { Mur } from '../src/ecrans/mur/Mur';
 import { ilYa, lireSucces } from '../src/ecrans/mur/navigation-mur';
+import { oublierMoi } from '../src/ecrans/mur/useMoi';
+import { oublierMemoireMur } from '../src/ecrans/mur/useMur';
 import { demanderA, direOui } from '../src/matrix/bulles';
 import { ecouterMur } from '../src/matrix/mur';
 import { lireProfil, lireProfilClient } from '../src/matrix/profil';
 import { lireSession } from '../src/matrix/session';
+import { clientEcran, coupureReseau, differe } from './faux-ecran';
 
 // Jamais le vrai serveur : le Mur, les bulles et les profils sont simulés.
 vi.mock('../src/coquille/FournisseurMatrix', () => ({ useMatrix: vi.fn() }));
@@ -31,7 +34,8 @@ vi.mock('../src/matrix/bulles', () => ({
   direOui: vi.fn(),
 }));
 
-const CLIENT = { simule: true } as never;
+const FAUX = clientEcran();
+const CLIENT = FAUX as never;
 const SESSION = { userId: '@moi:sia', accessToken: 'jeton', deviceId: 'A' };
 const PLUS_TARD = Date.now() + 3_600_000;
 
@@ -96,6 +100,18 @@ function murSimule(statuts: unknown[] = STATUTS, demandes: unknown[] = DEMANDES)
   }) as never);
 }
 
+type Instantane = { statuts: unknown[]; demandes: unknown[] };
+let changerMur: (m: Instantane) => void = () => undefined;
+
+/** Le Mur lu une première fois, puis modifiable à la main (comme quand un événement arrive). */
+function murVivant(statuts: unknown[] = STATUTS, demandes: unknown[] = DEMANDES) {
+  vi.mocked(ecouterMur).mockImplementation(((_c: unknown, rappel: (m: Instantane) => void) => {
+    changerMur = rappel;
+    rappel({ statuts, demandes });
+    return () => undefined;
+  }) as never);
+}
+
 function Etat() {
   const l = useLocation();
   return <p data-testid="lieu">{l.pathname + l.search}</p>;
@@ -125,6 +141,9 @@ const lieu = () => screen.getByTestId('lieu').textContent;
 describe('Écrans du Mur', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    oublierMoi();
+    oublierMemoireMur();
+    FAUX.changerSynchro('SYNCING');
     vi.mocked(useMatrix).mockReturnValue({ client: CLIENT, etat: 'pret' });
     vi.mocked(lireSession).mockReturnValue(SESSION);
     vi.mocked(lireProfil).mockReset().mockResolvedValue({ ok: true, profil: null });
@@ -228,7 +247,9 @@ describe('Écrans du Mur', () => {
     it('reprend le quartier de l’adresse', () => {
       afficher(cheminMur('Akanda'));
       expect(screen.getByRole('searchbox')).toHaveValue('Akanda');
-      expect(within(screen.getByRole('link', { name: /Plombier/ })).getByText('1 dispo')).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('link', { name: /Plombier/ })).getByText('1 dispo'),
+      ).toBeInTheDocument();
     });
 
     it('toucher une case ouvre la liste du métier avec le quartier', () => {
@@ -273,6 +294,94 @@ describe('Écrans du Mur', () => {
       vi.mocked(useMatrix).mockReturnValue({ client: null, etat: 'erreur-reseau' });
       afficher(CHEMINS.mur);
       expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+    });
+
+    describe('liste vivante', () => {
+      it('un prestataire qui arrive s’affiche seul : le chiffre monte, sans rien toucher', () => {
+        murVivant();
+        afficher(CHEMINS.mur);
+        expect(
+          within(screen.getByRole('link', { name: /Plombier/ })).getByText('2 dispo'),
+        ).toBeInTheDocument();
+        const nouveau = {
+          eventId: '$p3',
+          userId: '@neuf:sia',
+          pseudo: 'neuf-3',
+          metier: 'Plombier',
+          zone: 'Akanda',
+          fin: PLUS_TARD,
+        };
+        act(() => changerMur({ statuts: [...STATUTS, nouveau], demandes: DEMANDES }));
+        expect(
+          within(screen.getByRole('link', { name: /Plombier/ })).getByText('3 dispo'),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', { name: /actualiser|recharger/i }),
+        ).not.toBeInTheDocument();
+      });
+
+      it('un nouveau métier apparaît en place : les cases déjà là gardent leur élément', () => {
+        murVivant();
+        afficher(CHEMINS.mur);
+        const plombier = screen.getByRole('link', { name: /Plombier/ });
+        const coiffeuse = {
+          eventId: '$p4',
+          userId: '@coif:sia',
+          pseudo: 'coif-4',
+          metier: 'Coiffeuse',
+          zone: 'Akanda',
+          fin: PLUS_TARD,
+        };
+        act(() => changerMur({ statuts: [...STATUTS, coiffeuse], demandes: DEMANDES }));
+        expect(screen.getByRole('link', { name: /Coiffeuse/ })).toBeInTheDocument();
+        // Même élément dans la page (pas reconstruit) : rien ne clignote.
+        expect(screen.getByRole('link', { name: /Plombier/ })).toBe(plombier);
+      });
+
+      it('chaque case porte sa clé : la liste peut glisser au lieu de sauter', () => {
+        afficher(CHEMINS.mur);
+        const case1 = screen.getAllByRole('listitem')[0];
+        expect(case1).toHaveAttribute('data-glisse', 'Plombier');
+      });
+
+      it('« Mise à jour… » pendant que le client rattrape ses événements, puis plus rien', () => {
+        afficher(CHEMINS.mur);
+        expect(screen.queryByText('Mise à jour…')).not.toBeInTheDocument();
+        act(() => FAUX.changerSynchro('CATCHUP'));
+        expect(screen.getByText('Mise à jour…')).toBeInTheDocument();
+        // La grille reste là pendant la mise à jour : jamais d'écran vide ou de « Chargement… ».
+        expect(screen.getByRole('link', { name: /Plombier/ })).toBeInTheDocument();
+        act(() => FAUX.changerSynchro('SYNCING'));
+        expect(screen.queryByText('Mise à jour…')).not.toBeInTheDocument();
+      });
+
+      it('l’écran suivant s’affiche tout de suite avec ce que le Mur a déjà lu (pas de « Chargement… »)', () => {
+        // Première lecture au Mur ; ensuite le serveur met du temps à répondre (aucun rappel).
+        let appels = 0;
+        vi.mocked(ecouterMur).mockImplementation(((
+          _c: unknown,
+          rappel: (m: Instantane) => void,
+        ) => {
+          appels += 1;
+          if (appels === 1) rappel({ statuts: STATUTS, demandes: DEMANDES });
+          return () => undefined;
+        }) as never);
+        afficher(CHEMINS.mur);
+        fireEvent.click(screen.getByRole('link', { name: /Plombier/ }));
+        expect(
+          screen.getByRole('heading', { name: 'Disponibles maintenant · 2' }),
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Chargement…')).not.toBeInTheDocument();
+        // Et la fiche, au pas suivant, aussi.
+        fireEvent.click(screen.getByRole('link', { name: /mangue-douce/ }));
+        expect(screen.getByRole('heading', { name: 'mangue-douce' })).toBeInTheDocument();
+      });
+
+      it('première lecture pas finie : « Chargement… » une seule fois, jamais ensuite', () => {
+        vi.mocked(ecouterMur).mockImplementation((() => () => undefined) as never);
+        afficher(CHEMINS.mur);
+        expect(screen.getByText('Chargement…')).toBeInTheDocument();
+      });
     });
   });
 
@@ -361,6 +470,93 @@ describe('Écrans du Mur', () => {
       expect(screen.getByRole('heading', { name: 'mangue-douce' })).toBeInTheDocument();
     });
 
+    describe('retour immédiat au toucher', () => {
+      it('Demander : le bouton dit « Demande envoyée… » tout de suite ; la liste vient quand le serveur confirme', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(demanderA).mockReturnValue(serveur.promesse);
+        afficher(cheminFichePrestataire('$p1', 'Plombier', 'Akanda'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
+
+        // Le serveur n'a pas répondu : l'écran a déjà changé, on reste sur la fiche.
+        const bouton = screen.getByRole('button', { name: 'Demande envoyée…' });
+        expect(bouton).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Demander' })).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'mangue-douce' })).toBeInTheDocument();
+
+        await act(async () => serveur.resoudre({ roomId: '!bulle:sia', reutilisee: false }));
+        expect(
+          await screen.findByRole('heading', { name: 'Plombier · Akanda' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Demande envoyée à mangue-douce');
+      });
+
+      it('Demander : pas de double toucher, une seule demande part', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(demanderA).mockReturnValue(serveur.promesse);
+        afficher(cheminFichePrestataire('$p1', 'Plombier', 'Akanda'));
+        const bouton = await screen.findByRole('button', { name: 'Demander' });
+        fireEvent.click(bouton);
+        fireEvent.click(bouton);
+        expect(demanderA).toHaveBeenCalledTimes(1);
+        await act(async () => serveur.resoudre({ roomId: '!bulle:sia', reutilisee: false }));
+      });
+
+      it('Demander : le serveur refuse (pas de réseau) : message, et le bouton redevient actif', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(demanderA).mockReturnValueOnce(serveur.promesse);
+        afficher(cheminFichePrestataire('$p1', 'Plombier', 'Akanda'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
+        expect(screen.getByRole('button', { name: 'Demande envoyée…' })).toBeDisabled();
+
+        await act(async () => serveur.rejeter(coupureReseau()));
+        expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+        expect(screen.getByRole('button', { name: 'Demander' })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: 'Demande envoyée…' })).not.toBeInTheDocument();
+
+        // On peut réessayer.
+        fireEvent.click(screen.getByRole('button', { name: 'Demander' }));
+        expect(
+          await screen.findByRole('heading', { name: 'Plombier · Akanda' }),
+        ).toBeInTheDocument();
+        expect(demanderA).toHaveBeenCalledTimes(2);
+      });
+
+      it('autre refus du serveur : message, bouton rendu', async () => {
+        vi.mocked(demanderA).mockRejectedValue(new Error('Prestataire indisponible.'));
+        afficher(cheminFichePrestataire('$p1', 'Plombier'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Un problème est survenu.');
+        expect(screen.getByRole('button', { name: 'Demander' })).toBeEnabled();
+      });
+
+      it('on a quitté la fiche pendant l’envoi : la confirmation ne ramène personne en arrière', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(demanderA).mockReturnValue(serveur.promesse);
+        afficher(cheminFichePrestataire('$p1', 'Plombier', 'Akanda'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
+        fireEvent.click(screen.getByRole('link', { name: 'Retour' }));
+        expect(
+          await screen.findByRole('heading', { name: 'Plombier · Akanda' }),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('link', { name: 'Retour' }));
+        expect(screen.getByRole('heading', { name: 'Le Mur' })).toBeInTheDocument();
+
+        await act(async () => serveur.resoudre({ roomId: '!bulle:sia', reutilisee: false }));
+        expect(screen.getByRole('heading', { name: 'Le Mur' })).toBeInTheDocument();
+      });
+
+      it('« Demander » est là dès l’ouverture de la fiche quand le profil est déjà connu', async () => {
+        // Passage par le Mur : le profil est lu une fois.
+        afficher(CHEMINS.mur);
+        await screen.findByRole('link', { name: 'Publier une demande' });
+        fireEvent.click(screen.getByRole('link', { name: /Plombier/ }));
+        // Le serveur ne répond plus : la fiche, elle, a déjà ce qu'il faut.
+        vi.mocked(lireProfil).mockReturnValue(new Promise(() => undefined));
+        fireEvent.click(screen.getByRole('link', { name: /mangue-douce/ }));
+        expect(screen.getByRole('button', { name: 'Demander' })).toBeEnabled();
+      });
+    });
+
     it('un prestataire ne voit pas « Demander »', async () => {
       vi.mocked(lireProfil).mockResolvedValue(PROFIL_PRESTA);
       afficher(cheminFichePrestataire('$p1', 'Plombier'));
@@ -399,6 +595,35 @@ describe('Écrans du Mur', () => {
       afficher(cheminFicheDemande('$d1', 'Plombier', 'Akanda'));
       fireEvent.click(await screen.findByRole('button', { name: "D'accord ?" }));
       expect(await screen.findByText('écran bulle')).toBeInTheDocument();
+    });
+
+    describe('retour immédiat au toucher', () => {
+      it('« D’accord ? » : le bouton dit « Réponse envoyée… » tout de suite ; la liste vient quand le serveur confirme', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(direOui).mockReturnValue(serveur.promesse);
+        afficher(cheminFicheDemande('$d1', 'Plombier', 'Akanda'));
+        fireEvent.click(await screen.findByRole('button', { name: "D'accord ?" }));
+
+        expect(screen.getByRole('button', { name: 'Réponse envoyée…' })).toBeDisabled();
+        expect(screen.getByRole('heading', { name: 'palmier-48' })).toBeInTheDocument();
+
+        await act(async () => serveur.resoudre({ roomId: '!bulle:sia', reutilisee: false }));
+        expect(
+          await screen.findByRole('heading', { name: 'Plombier · Akanda' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Réponse envoyée à palmier-48');
+      });
+
+      it('le serveur refuse (pas de réseau) : message, et le bouton redevient actif', async () => {
+        const serveur = differe<{ roomId: string; reutilisee: boolean }>();
+        vi.mocked(direOui).mockReturnValueOnce(serveur.promesse);
+        afficher(cheminFicheDemande('$d1', 'Plombier', 'Akanda'));
+        fireEvent.click(await screen.findByRole('button', { name: "D'accord ?" }));
+        await act(async () => serveur.rejeter(coupureReseau()));
+        expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+        expect(screen.getByRole('button', { name: "D'accord ?" })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: 'Réponse envoyée…' })).not.toBeInTheDocument();
+      });
     });
 
     it('un client ne voit pas « D’accord ? »', async () => {

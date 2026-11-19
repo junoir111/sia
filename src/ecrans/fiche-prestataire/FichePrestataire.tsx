@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
@@ -29,11 +29,20 @@ export function FichePrestataire() {
   const { moi, userId, chargement } = useMoi();
   const [envoi, setEnvoi] = useState(false);
   const [bandeau, setBandeau] = useState<string | null>(null);
+  // Faux si on a quitté la fiche pendant l'envoi : on ne ramène alors personne en arrière.
+  const ici = useRef(false);
+  useEffect(() => {
+    ici.current = true;
+    return () => {
+      ici.current = false;
+    };
+  }, []);
 
   const retour = cheminRetourFiche(metierOrigine, quartier);
   const statut = vue.statuts.find((s) => s.eventId === eventId && s.fin > vue.maintenant);
   const reseauKo = etat === 'erreur-reseau' || vue.erreur;
 
+  /** Le bouton dit « Demande envoyée… » au toucher ; le serveur confirme ensuite (sinon : message, bouton rendu). */
   async function demander() {
     if (!client || !moi || !statut || envoi) return;
     setEnvoi(true);
@@ -46,6 +55,7 @@ export function FichePrestataire() {
       setBandeau(familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME);
       return;
     }
+    if (!ici.current) return;
     // Bulle déjà ouverte avec cette personne : on y va directement.
     if (resultat.reutilisee) navigate(cheminBulle(resultat.roomId));
     else navigate(retour, { state: etatSucces(`Demande envoyée à ${statut.pseudo}`) });
@@ -105,7 +115,10 @@ export function FichePrestataire() {
         {bandeau && <Bandeau message={bandeau} />}
         {peutDemander && (
           <>
-            <BoutonPrincipal chargement={envoi} onClick={() => void demander()}>
+            <BoutonPrincipal
+              envoye={envoi ? 'Demande envoyée…' : undefined}
+              onClick={() => void demander()}
+            >
               Demander
             </BoutonPrincipal>
             <p className="fiche__note">Ta demande part à lui seul. Pas de photo, pas de nom.</p>

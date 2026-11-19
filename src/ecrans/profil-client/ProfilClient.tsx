@@ -23,6 +23,7 @@ import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeChevron, IconeCrayon } from '../../ui/icones';
 import { EVENEMENT_CHOISI, aChoisi, oublierChoix } from '../bandeau/signal';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
+import { memoriserMoi } from '../mur/useMoi';
 import { familleErreur } from './branchements';
 import type { ErreurReseau } from './branchements';
 import {
@@ -83,7 +84,9 @@ export function ProfilClient() {
   );
   const [erreurs, setErreurs] = useState<ErreursDemande>({});
   const [bandeau, setBandeau] = useState<string | null>(null);
-  const [envoi, setEnvoi] = useState(false);
+  // Ce que le bouton montre PENDANT que le serveur confirme (affichage immédiat). Quand le serveur refuse,
+  // on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
+  const [attendu, setAttendu] = useState<'envoyee' | 'retiree' | null>(null);
   const [modifie, setModifie] = useState(false);
   const [retiree, setRetiree] = useState(false);
   const [edition, setEdition] = useState(false);
@@ -91,6 +94,14 @@ export function ProfilClient() {
   const [choisi, setChoisi] = useState(aChoisi);
   const champPseudo = useRef<HTMLInputElement>(null);
   const idPhrase = useId();
+  // Faux si on a quitté la page pendant l'envoi : on ne ramène alors personne au Mur.
+  const ici = useRef(false);
+  useEffect(() => {
+    ici.current = true;
+    return () => {
+      ici.current = false;
+    };
+  }, []);
 
   // Offre acceptée dans le bandeau : la demande est terminée, la page repasse au gris.
   useEffect(() => {
@@ -139,7 +150,8 @@ export function ProfilClient() {
 
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
-  const allume = enCours !== null;
+  const envoi = attendu !== null;
+  const allume = attendu === null ? enCours !== null : attendu === 'envoyee';
 
   function modifier(champ: keyof SaisieClient, valeur: string) {
     setSaisie((avant) => ({ ...avant, [champ]: valeur }));
@@ -175,7 +187,12 @@ export function ProfilClient() {
       setErreurs(verifie.erreurs);
       return;
     }
-    if (!(await retirer())) return;
+    // Le bouton passe au vert tout de suite ; si le serveur refuse, il revient à son état d'avant.
+    setAttendu('envoyee');
+    if (!(await retirer())) {
+      setAttendu(null);
+      return;
+    }
     const demande = verifie.demande;
     try {
       const c = exigerClient(client);
@@ -187,8 +204,17 @@ export function ProfilClient() {
       } as const;
       const enregistre = await enregistrerProfilClient(session, profil);
       if (!enregistre.ok && enregistre.erreur === 'session') {
+        setAttendu(null);
         navigate(CHEMINS.accueil, { replace: true });
         return;
+      }
+      // Profil enregistré : les écrans suivants (Mur, fiches) le savent tout de suite.
+      if (enregistre.ok) {
+        memoriserMoi(session.userId, {
+          role: 'client',
+          pseudo: demande.pseudo,
+          zone: demande.zone,
+        });
       }
       const eventId = await publierDemande(c, demande);
       const nouvelle = { eventId, demande };
@@ -201,8 +227,10 @@ export function ProfilClient() {
       } catch {
         // Stockage plein ou bloqué : la demande reste publiée, elle expirera seule.
       }
-      navigate(cheminMur());
+      setAttendu(null);
+      if (ici.current) navigate(cheminMur());
     } catch (e) {
+      setAttendu(null);
       echec(e);
     }
   }
@@ -210,13 +238,14 @@ export function ProfilClient() {
   async function toucherSia() {
     if (envoi) return;
     setBandeau(null);
-    setEnvoi(true);
     if (allume && !modifie) {
+      // Le bouton repasse au gris tout de suite ; si le serveur refuse, il redevient vert avec un message.
+      setAttendu('retiree');
       if (await retirer()) setRetiree(true);
+      setAttendu(null);
     } else {
       await publier();
     }
-    setEnvoi(false);
   }
 
   function arrondirBudget() {
@@ -236,8 +265,10 @@ export function ProfilClient() {
 
   const pseudoEnSaisie = edition || focusPseudo || saisie.pseudo.trim() === '';
 
+  // La phrase suit le bouton, sans attendre le serveur (« Ta demande est partie. » dès le toucher).
   let phrase = '';
-  if (envoi) phrase = 'Envoi…';
+  if (attendu === 'envoyee') phrase = 'Ta demande est partie.';
+  else if (attendu === 'retiree') phrase = 'Ta demande est retirée.';
   else if (allume && modifie) phrase = 'Touche SIA pour envoyer ta nouvelle demande.';
   else if (allume) phrase = 'Ta demande est partie.';
   else if (retiree) phrase = 'Ta demande est retirée.';

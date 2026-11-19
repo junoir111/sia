@@ -224,6 +224,105 @@ describe('demanderA', () => {
     });
     expect(c.createRoom).toHaveBeenCalledTimes(2);
   });
+
+  describe('vérification de la bulle pendant l’invitation (2 allers-retours, pas d’attente de synchro)', () => {
+    /** Bulle telle qu'elle arrive par la synchro juste après la création : moi seul, l'invitation pas encore vue. */
+    function bulleSansInvitationVue(createur = MOI) {
+      return salon({
+        roomId: BULLE,
+        appartenance: 'join',
+        createur,
+        membres: { [MOI]: { membership: 'join' } },
+        etat: etatsBulle(
+          { [MOI]: PUBLIC_CLIENT, [AUTRE]: { pseudo: 'puma', zone: 'Nzeng' } },
+          createur,
+        ),
+        evenements: [],
+      });
+    }
+
+    function clientSansInvitationVue(createur = MOI) {
+      const c = fauxClient([murAvecPresta()]);
+      c.createRoom.mockImplementation(async () => {
+        c.salons.push(bulleSansInvitationVue(createur));
+        return { room_id: BULLE };
+      });
+      return c;
+    }
+
+    it("rend la main dès que le serveur acquitte l'invitation, sans attendre qu'elle revienne par la synchro", async () => {
+      const c = clientSansInvitationVue();
+      await expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).resolves.toEqual({
+        roomId: BULLE,
+        reutilisee: false,
+      });
+      expect(c.invite).toHaveBeenCalledTimes(1);
+      expect(c.leave).not.toHaveBeenCalled();
+      expect(c.kick).not.toHaveBeenCalled();
+    });
+
+    it("ne dit jamais « envoyée » avant l'acquittement du serveur, même si la bulle est déjà là", async () => {
+      const c = clientSansInvitationVue();
+      let acquitter: () => void = () => undefined;
+      c.invite.mockImplementation(
+        () =>
+          new Promise((fini) => {
+            acquitter = () => fini({});
+          }),
+      );
+      let fini = false;
+      const resultat = demanderA(comme(c), AUTRE, PUBLIC_CLIENT).then((r) => {
+        fini = true;
+        return r;
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(fini).toBe(false);
+      acquitter();
+      await expect(resultat).resolves.toMatchObject({ roomId: BULLE, reutilisee: false });
+    });
+
+    it("refuse quand l'autre est déjà parti ou banni : bulle quittée", async () => {
+      for (const membership of ['leave', 'ban']) {
+        const c = clientDemande({ [AUTRE]: { membership } });
+        const resultat = expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).rejects.toThrow();
+        await vi.advanceTimersByTimeAsync(11_000);
+        await resultat;
+        expect(c.leave).toHaveBeenCalledWith(BULLE);
+      }
+    });
+
+    it("refuse une bulle que je n'ai pas créée (état écrit par un autre) : bulle quittée", async () => {
+      const c = clientSansInvitationVue(AUTRE);
+      const resultat = expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(11_000);
+      await resultat;
+      expect(c.leave).toHaveBeenCalledWith(BULLE);
+    });
+
+    it("refuse une 3e personne dès l'arrivée de la bulle, même sans l'invitation de l'autre", async () => {
+      const c = fauxClient([murAvecPresta()]);
+      c.createRoom.mockImplementation(async () => {
+        c.salons.push(
+          salon({
+            roomId: BULLE,
+            appartenance: 'join',
+            createur: MOI,
+            membres: { [MOI]: { membership: 'join' }, [INTRUS]: { membership: 'join' } },
+            etat: etatsBulle(
+              { [MOI]: PUBLIC_CLIENT, [AUTRE]: { pseudo: 'puma', zone: 'Nzeng' } },
+              MOI,
+            ),
+            evenements: [],
+          }),
+        );
+        return { room_id: BULLE };
+      });
+      const resultat = expect(demanderA(comme(c), AUTRE, PUBLIC_CLIENT)).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(11_000);
+      await resultat;
+      expect(c.leave).toHaveBeenCalledWith(BULLE);
+    });
+  });
 });
 
 const RAISON = 'palmier-48 (Akanda) vous demande';
@@ -333,10 +432,19 @@ describe('invitation « X vous demande » côté prestataire', () => {
     expect(c.leave).not.toHaveBeenCalled();
   });
 
+  it("l'accepter prépare le chiffrement en arrière-plan (le 1er message partira en un aller-retour)", async () => {
+    const c = clientPresta(invitationDirecte(RAISON));
+    await accepterOffre(comme(c), BULLE);
+    await vi.waitFor(() => expect(c.prepareToEncrypt).toHaveBeenCalledTimes(1));
+    expect(c.prepareToEncrypt).toHaveBeenCalledWith(c.salons[0]);
+  });
+
   it("l'accepter est refusé (bulle quittée) avec une 3e personne", async () => {
     const c = clientPresta(invitationDirecte(RAISON, { tiers: true }));
     await expect(accepterOffre(comme(c), BULLE)).rejects.toThrow();
     expect(c.leave).toHaveBeenCalledWith(BULLE);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(c.prepareToEncrypt).not.toHaveBeenCalled();
   });
 
   it("l'accepter est refusé si la bulle porte une demande, un budget ou n'a pas été créée par l'invitant", async () => {
@@ -370,6 +478,7 @@ describe('invitation « X vous demande » côté prestataire', () => {
     await vi.advanceTimersByTimeAsync(11_000);
     await resultat;
     expect(c.leave).toHaveBeenCalledWith(BULLE);
+    expect(c.prepareToEncrypt).not.toHaveBeenCalled();
   });
 
   it("n'enregistre jamais un pseudo venu de la raison d'une invitation (pas de blocage de pseudo)", () => {

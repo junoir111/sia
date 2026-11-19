@@ -120,8 +120,11 @@ export function fauxClient(
 ) {
   const e = emetteur();
   let n = 0;
+  /** Partage anticipé de la clé de salon (préchauffage) : les tests regardent s'il a été demandé. */
+  const prepareToEncrypt = vi.fn();
   const c = {
     salons,
+    prepareToEncrypt,
     getUserId: () => MOI,
     getRoom: (id: string) => salons.find((s) => s.roomId === id) ?? null,
     getRooms: () => salons,
@@ -143,6 +146,7 @@ export function fauxClient(
       chiffre
         ? {
             isEncryptionEnabledInRoom: async () => true,
+            prepareToEncrypt,
             getUserDeviceInfo: async (ids: string[]) =>
               new Map(
                 ids.map((id) => [

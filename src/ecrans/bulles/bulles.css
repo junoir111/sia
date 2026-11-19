@@ -1,4 +1,9 @@
 /* M3 Liste des bulles — mesures de la maquette M3-liste-bulles.jpg (375 × 812). */
+.bulles__entete {
+  display: flex;
+  align-items: center;
+}
+
 .bulles__titre {
   margin: 0;
   font-size: var(--sia-titre);
@@ -114,19 +119,9 @@
   font-weight: 500;
 }
 
-/* Offre reçue touchée : Non / Oui sous la ligne. */
+/* Offre reçue touchée : Non / Oui sous la ligne (la ligne elle-même est dans composants.css, .reponse). */
 .bulles__choix {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 0 0 16px 64px;
-}
-
-.bulles__question {
-  flex: 1;
-  color: var(--sia-accent);
-  font-size: 15px;
-  font-weight: 600;
 }
 
 .bulles__vide {

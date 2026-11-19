@@ -7,14 +7,26 @@ import { accepterOffre, refuserOffre } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
+import { IndicateurMiseAJour } from '../../ui/IndicateurMiseAJour';
+import { ReponseOuiNon } from '../../ui/ReponseOuiNon';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeHorloge, IconeRetour } from '../../ui/icones';
+import { useGlisse } from '../../ui/useGlisse';
+import {
+  commencerReponse,
+  enFile,
+  finirReponse,
+  messageEchec,
+  rater,
+  reponseParties,
+  useReponse,
+} from '../bandeau/reponses';
+import { useRattrapage } from '../mur/useRattrapage';
 import { familleErreur } from '../profil-client/branchements';
 import { useBulles } from './useBulles';
 import './bulles.css';
 
 const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
 
 /** Petit texte d'état à droite de la ligne, et sa couleur. */
 function etatLigne(b: ResumeBulle): { texte: string; vif: boolean } {
@@ -34,20 +46,25 @@ function sousTitre(b: ResumeBulle): string {
 type ProprietesLigne = {
   bulle: ResumeBulle;
   ouverte: boolean;
-  occupee: boolean;
   onToucher: () => void;
   onRepondre: (oui: boolean) => void;
 };
 
-function LigneBulle({ bulle, ouverte, occupee, onToucher, onRepondre }: ProprietesLigne) {
+function LigneBulle({ bulle, ouverte, onToucher, onRepondre }: ProprietesLigne) {
+  const reponse = useReponse(bulle.roomId);
+  // Réponse confirmée : la ligne s'en va (la liste se met à jour toute seule juste après).
+  if (reponse === 'fait') return null;
   const etat = etatLigne(bulle);
   const nonLus = bulle.nonLus > 0 ? `, ${bulle.nonLus} non lu${bulle.nonLus > 1 ? 's' : ''}` : '';
+  const invitation = bulle.etat === 'invitation-recue';
+  // La question reste là tant qu'une réponse est partie (même donnée depuis le bandeau).
+  const choix = invitation && (ouverte || reponse !== 'repos');
   return (
-    <li className="bulles__ligne">
+    <li className="bulles__ligne" data-glisse={bulle.roomId}>
       <button
         type="button"
         className="bulles__toucher"
-        aria-expanded={bulle.etat === 'invitation-recue' ? ouverte : undefined}
+        aria-expanded={invitation ? choix : undefined}
         aria-label={`${bulle.autre.pseudo}, ${sousTitre(bulle)}${etat.texte ? `, ${etat.texte}` : ''}${nonLus}`}
         onClick={onToucher}
       >
@@ -67,27 +84,15 @@ function LigneBulle({ bulle, ouverte, occupee, onToucher, onRepondre }: Propriet
           </span>
         </span>
       </button>
-      {ouverte && (
-        <div className="bulles__choix">
-          <span className="bulles__question">Tu veux discuter ?</span>
-          <button
-            type="button"
-            className="petit-bouton"
-            disabled={occupee}
-            onClick={() => onRepondre(false)}
-          >
-            Non
-          </button>
-          <button
-            type="button"
-            className="petit-bouton petit-bouton--plein"
-            disabled={occupee}
-            aria-busy={occupee || undefined}
-            onClick={() => onRepondre(true)}
-          >
-            Oui
-          </button>
-        </div>
+      {choix && (
+        <ReponseOuiNon
+          className="bulles__choix"
+          question="Tu veux discuter ?"
+          envoi={reponseParties(reponse)}
+          erreur={messageEchec(reponse)}
+          onOui={() => onRepondre(true)}
+          onNon={() => onRepondre(false)}
+        />
       )}
     </li>
   );
@@ -98,9 +103,9 @@ export function Bulles() {
   const navigate = useNavigate();
   const { client, etat } = useMatrix();
   const bulles = useBulles(client);
+  const rattrape = useRattrapage(client);
+  const liste = useGlisse<HTMLUListElement>();
   const [choix, setChoix] = useState<string | null>(null);
-  const [occupee, setOccupee] = useState(false);
-  const [bandeau, setBandeau] = useState<string | null>(null);
 
   function retour() {
     // « Mon compte » vient du Mur : la flèche y ramène toujours (jamais d'impasse).
@@ -112,20 +117,20 @@ export function Bulles() {
     else navigate(cheminBulle(b.roomId));
   }
 
+  /** La ligne change d'état au toucher ; le serveur confirme ensuite (ou refuse : la ligne le dit). */
   async function repondre(roomId: string, oui: boolean) {
-    if (!client || occupee) return;
-    setOccupee(true);
-    setBandeau(null);
+    if (!client || !commencerReponse(roomId)) return;
     try {
-      if (oui) await accepterOffre(client, roomId);
+      if (oui) await enFile(() => accepterOffre(client, roomId));
       else await refuserOffre(client, roomId);
-      setChoix(null);
-      if (oui) navigate(cheminBulle(roomId));
     } catch (e) {
-      setBandeau(familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME);
-    } finally {
-      setOccupee(false);
+      rater(roomId, familleErreur(e) === 'reseau' ? 'reseau' : 'probleme');
+      return;
     }
+    // Oui : on entre dans la bulle sans que la ligne disparaisse avant (pas de clignotement).
+    if (oui) navigate(cheminBulle(roomId));
+    finirReponse(roomId);
+    setChoix(null);
   }
 
   let contenu;
@@ -135,13 +140,12 @@ export function Bulles() {
     contenu = <p className="bulles__vide">Aucune bulle pour l'instant.</p>;
   else
     contenu = (
-      <ul className="bulles__liste">
+      <ul className="bulles__liste" ref={liste}>
         {bulles.map((b) => (
           <LigneBulle
             key={b.roomId}
             bulle={b}
-            ouverte={choix === b.roomId && b.etat === 'invitation-recue'}
-            occupee={occupee}
+            ouverte={choix === b.roomId}
             onToucher={() => toucher(b)}
             onRepondre={(oui) => void repondre(b.roomId, oui)}
           />
@@ -154,12 +158,14 @@ export function Bulles() {
       <button type="button" className="retour" aria-label="Retour" onClick={retour}>
         <IconeRetour />
       </button>
-      <h1 className="bulles__titre">Bulles</h1>
+      <div className="bulles__entete">
+        <h1 className="bulles__titre">Bulles</h1>
+        <IndicateurMiseAJour actif={rattrape} />
+      </div>
       <p className="bulles__rappel">
         <IconeHorloge className="bulles__horloge" />
         Les messages s'effacent après 1 minute.
       </p>
-      {bandeau && <Bandeau message={bandeau} />}
       {contenu}
       <BoutonDeconnexion />
     </main>
