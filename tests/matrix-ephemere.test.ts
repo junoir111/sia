@@ -56,13 +56,47 @@ describe('marquerAffiche', () => {
     expect(localStorage.getItem('sia.a-effacer')).toBeNull();
   });
 
-  it('réessaie après une coupure réseau, abandonne si le serveur refuse', async () => {
+  it('un message déjà effacé n’est jamais effacé une seconde fois, même si l’écran le réaffiche', async () => {
+    const c = fauxClient([]);
+    marquerAffiche(comme(c), BULLE, '$m1');
+    await vi.advanceTimersByTimeAsync(MINUTE);
+    expect(c.redactEvent).toHaveBeenCalledTimes(1);
+    // L'écran refait un message tout neuf avant que l'effacement soit revenu par la synchro.
+    marquerAffiche(comme(c), BULLE, '$m1');
+    await vi.advanceTimersByTimeAsync(2 * MINUTE);
+    expect(c.redactEvent).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('sia.a-effacer')).toBeNull();
+  });
+
+  it('un message que cet appareil sait déjà effacé n’envoie aucune demande', async () => {
+    const efface = evenement({
+      type: 'm.room.message',
+      sender: AUTRE,
+      roomId: BULLE,
+      id: '$m1',
+      redacted: true,
+    });
+    const b = salon({
+      roomId: BULLE,
+      appartenance: 'join',
+      membres: {},
+      etat: {},
+      evenements: [efface],
+    });
+    const c = fauxClient([b]);
+    marquerAffiche(comme(c), BULLE, '$m1');
+    await vi.advanceTimersByTimeAsync(MINUTE);
+    expect(c.redactEvent).not.toHaveBeenCalled();
+    expect(localStorage.getItem('sia.a-effacer')).toBeNull();
+  });
+
+  it('réessaie vite après une coupure réseau, abandonne si le serveur refuse', async () => {
     const c = fauxClient([]);
     c.redactEvent.mockRejectedValueOnce(new TypeError('réseau'));
     marquerAffiche(comme(c), BULLE, '$m1');
     await vi.advanceTimersByTimeAsync(MINUTE);
     expect(localStorage.getItem('sia.a-effacer')).toContain('$m1');
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(c.redactEvent).toHaveBeenCalledTimes(2);
     expect(localStorage.getItem('sia.a-effacer')).toBeNull();
 

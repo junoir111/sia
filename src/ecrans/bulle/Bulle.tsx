@@ -83,9 +83,11 @@ function BulleMessage({
   onReessayer: (id: string) => void;
 }) {
   const [reste] = useState(() => tempsRestant(message.id, Date.now()));
+  const { id, moi } = message;
+  // Seulement quand le message change vraiment : le fil refait un objet tout neuf à chaque nouveau message.
   useEffect(() => {
-    if (!message.moi) marquerAffiche(c, roomId, message.id);
-  }, [c, roomId, message]);
+    if (!moi) marquerAffiche(c, roomId, id);
+  }, [c, roomId, id, moi]);
 
   const style = {
     '--reste': reste / DUREE_MESSAGE_MS,

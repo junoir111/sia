@@ -34,7 +34,8 @@ vi.mock('matrix-js-sdk', async (original) => {
   };
 });
 
-import { ClientEvent, HttpApiEvent, SyncState } from 'matrix-js-sdk';
+import { ClientEvent, HttpApiEvent, MatrixScheduler, SyncState } from 'matrix-js-sdk';
+import { DELAI_REQUETE_MS } from '../src/matrix/envoi';
 import {
   PAUSE_RECHARGEMENT_MS,
   arreterClient,
@@ -91,6 +92,15 @@ describe('demarrerClient', () => {
     expect(clientActif()).toBe(c);
     expect(await demarrerClient(SESSION)).toBe(c);
     expect(faux.clients).toHaveLength(1);
+  });
+
+  it('envoi fiable : file d’envoi par bulle et délai sur les requêtes ordinaires', async () => {
+    const promesse = demarrerClient(SESSION);
+    await pret();
+    await promesse;
+    const options = faux.options[0] as { scheduler: unknown; localTimeoutMs: number };
+    expect(options.scheduler).toBeInstanceOf(MatrixScheduler);
+    expect(options.localTimeoutMs).toBe(DELAI_REQUETE_MS);
   });
 
   it('réserve de clés d’un autre compte : init raté une fois, réserve effacée, puis réessai', async () => {

@@ -14,7 +14,9 @@ const CLE_FILE = 'sia.a-effacer';
 /** Au-delà, les plus anciens sont effacés tout de suite (la file ne grossit pas sans fin). */
 const TAILLE_MAX_FILE = 500;
 /** Nouvel essai après une coupure réseau. */
-const NOUVEL_ESSAI_MS = 30_000;
+const NOUVEL_ESSAI_MS = 10_000;
+/** Identifiants déjà traités gardés en mémoire (les plus anciens sont oubliés au-delà). */
+const EFFACES_MAX = 1000;
 /** Silence Radio : pages d'historique relues au plus pour trouver les messages restants. */
 const PAGES_MAX = 10;
 const TAILLE_PAGE = 50;
@@ -27,6 +29,25 @@ const TYPES_EPHEMERES = new Set(['m.room.message', 'm.room.encrypted', TYPE_FICH
 type AEffacer = { roomId: string; eventId: string; echeance: number };
 
 const minuteries = new Map<string, ReturnType<typeof setTimeout>>();
+/**
+ * Messages dont l'effacement est terminé sur cet appareil. L'écran refait un message tout neuf à chaque
+ * changement du fil : sans cette mémoire, un message déjà effacé (mais pas encore revenu par la synchro)
+ * repartait pour une minute de plus puis était effacé une deuxième, une troisième fois.
+ */
+const effaces = new Set<string>();
+
+function noterEfface(eventId: string): void {
+  effaces.add(eventId);
+  if (effaces.size > EFFACES_MAX) {
+    const plusAncien = effaces.values().next();
+    if (!plusAncien.done) effaces.delete(plusAncien.value);
+  }
+}
+
+/** Vrai si cet appareil voit déjà ce message comme effacé (rien à demander au serveur). */
+function dejaEfface(c: MatrixClient, entree: AEffacer): boolean {
+  return c.getRoom(entree.roomId)?.findEventById(entree.eventId)?.isRedacted() === true;
+}
 
 function estEntree(v: unknown): v is AEffacer {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
@@ -75,15 +96,18 @@ function statutHttp(erreur: unknown): number | undefined {
 
 async function effacer(c: MatrixClient, entree: AEffacer): Promise<void> {
   minuteries.delete(entree.eventId);
-  try {
-    await c.redactEvent(entree.roomId, entree.eventId);
-  } catch (erreur) {
-    const statut = statutHttp(erreur);
-    if (statut === undefined || !STATUTS_DEFINITIFS.includes(statut)) {
-      programmer(c, { ...entree, echeance: Date.now() + NOUVEL_ESSAI_MS });
-      return;
+  if (!dejaEfface(c, entree)) {
+    try {
+      await c.redactEvent(entree.roomId, entree.eventId);
+    } catch (erreur) {
+      const statut = statutHttp(erreur);
+      if (statut === undefined || !STATUTS_DEFINITIFS.includes(statut)) {
+        programmer(c, { ...entree, echeance: Date.now() + NOUVEL_ESSAI_MS });
+        return;
+      }
     }
   }
+  noterEfface(entree.eventId);
   retirerDeLaFile(entree.eventId);
 }
 
@@ -101,7 +125,7 @@ function programmer(c: MatrixClient, entree: AEffacer): void {
  * Le compte à rebours d'une minute part de maintenant ; un message déjà en file garde sa première échéance.
  */
 export function marquerAffiche(c: MatrixClient, roomId: string, eventId: string): void {
-  if (!estIdSalon(roomId) || !estIdEvenement(eventId)) return;
+  if (!estIdSalon(roomId) || !estIdEvenement(eventId) || effaces.has(eventId)) return;
   const file = lireFile();
   if (file.some((e) => e.eventId === eventId)) return;
   const entree = { roomId, eventId, echeance: Date.now() + DUREE_MESSAGE_MS };
@@ -152,6 +176,7 @@ export function reprendreEffacements(c: MatrixClient): void {
 export function arreterEphemere(): void {
   for (const minuterie of minuteries.values()) clearTimeout(minuterie);
   minuteries.clear();
+  effaces.clear();
 }
 
 export function estEphemere(ev: MatrixEvent): boolean {

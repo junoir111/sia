@@ -9,6 +9,7 @@ import { logger as journalSdk, type Logger } from 'matrix-js-sdk/lib/logger';
 import { ADRESSE_SERVEUR } from '../config';
 import type { Session } from './auth';
 import { arreterEphemere, reprendreEffacements } from './ephemere';
+import { DELAI_REQUETE_MS, creerPlanificateur } from './envoi';
 import { suivreSynchro, surveillerSynchro } from './reveil';
 import { estSession } from './session';
 
@@ -199,6 +200,9 @@ async function lancer(
     deviceId: session.deviceId,
     logger: silence,
     fetchFn: suivi.fetchFn,
+    // Envoi fiable sur connexion capricieuse (voir envoi.ts) : une file par bulle, renvoi après une coupure.
+    scheduler: creerPlanificateur(),
+    localTimeoutMs: DELAI_REQUETE_MS,
   });
   try {
     await preparerChiffrement(c, session);
