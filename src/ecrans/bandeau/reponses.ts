@@ -81,8 +81,8 @@ export function useReponse(cle: string): EtatReponse {
 let derniere: Promise<unknown> = Promise.resolve();
 
 /**
- * Fait passer les acceptations d'offres une par une : en accepter deux en même temps, elles se
- * refuseraient l'une l'autre. La carte, elle, change d'état tout de suite ; seul l'envoi attend son tour.
+ * Fait passer les acceptations d'offres (et les mises en ligne du prestataire) une par une : en accepter deux
+ * en même temps, elles se refuseraient l'une l'autre. L'écran, lui, change d'état tout de suite ; seul l'envoi attend son tour.
  */
 export function enFile<T>(tache: () => Promise<T>): Promise<T> {
   const suite = derniere.then(tache);

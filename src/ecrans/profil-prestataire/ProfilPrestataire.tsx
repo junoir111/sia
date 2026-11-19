@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { CHEMINS, cheminMur } from '../../chemins';
 import { DUREE_MAX_ANNONCE_MS } from '../../config';
@@ -18,6 +18,7 @@ import type {
   ProfilPrestataire as Profil,
   SaisieProfil,
 } from '../../logique/profil';
+import type { Session } from '../../matrix/auth';
 import { monStatutActif, publierStatut, retirerStatut } from '../../matrix/mur';
 import { reglerNotificationDemandes } from '../../matrix/notifications';
 import { enregistrerProfil, lireProfil, lirePseudoEnregistre } from '../../matrix/profil';
@@ -35,6 +36,7 @@ import { LigneService } from '../../ui/LigneService';
 import { MessageErreur } from '../../ui/MessageErreur';
 import { PastilleChoix } from '../../ui/PastilleChoix';
 import { IconeCrayon } from '../../ui/icones';
+import { enFile } from '../bandeau/reponses';
 import { signalerDisponible } from '../bandeau/signal';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { memoriserMoi } from '../mur/useMoi';
@@ -60,6 +62,20 @@ function saisieDepuis(profil: Profil): SaisieProfil {
   };
 }
 
+/** Ce qu'on rapporte au profil quand le serveur a refusé la mise en ligne : le message et ce qui était tapé. */
+type Echec = { message: string; saisie: SaisieProfil };
+
+/** Relit l'échec passé dans l'état de navigation (inconnu au départ : on vérifie sa forme). */
+function echecDepuis(etat: unknown): Echec | null {
+  if (typeof etat !== 'object' || etat === null || !('echec' in etat)) return null;
+  const { echec } = etat;
+  if (typeof echec !== 'object' || echec === null) return null;
+  const { message, saisie } = echec as Partial<Echec>;
+  return typeof message === 'string' && typeof saisie === 'object' && saisie !== null
+    ? { message, saisie }
+    : null;
+}
+
 function exigerClient(client: MatrixClient | null): MatrixClient {
   // Client pas encore prêt : même message qu'une coupure réseau.
   if (!client)
@@ -71,22 +87,63 @@ function messageDe(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : MESSAGES.inconnue;
 }
 
+/** Enregistre le profil puis publie le statut sur le Mur. Rend l'erreur du serveur, ou null si tout est en ligne. */
+async function mettreEnLigne(
+  session: Session,
+  client: MatrixClient | null,
+  profil: Profil,
+): Promise<ErreurProfil | null> {
+  const enregistre = await enregistrerProfil(session, profil).catch(() => ({
+    ok: false as const,
+    erreur: 'inconnue' as const,
+  }));
+  if (!enregistre.ok) return enregistre.erreur;
+  const { pseudo, metier, zone, modalite, services } = profil;
+  try {
+    await publierStatut(exigerClient(client), {
+      pseudo,
+      metier,
+      zone,
+      modalite,
+      ...(services.length > 0 ? { services } : {}),
+      fin: Date.now() + DUREE_MAX_ANNONCE_MS,
+    });
+  } catch (e) {
+    return familleErreur(e);
+  }
+  try {
+    ecrireDisponible(true);
+  } catch {
+    // Le statut est publié sur le Mur ; seul le secours du téléphone manque.
+  }
+  // Disponible : prévenir (même appli fermée) quand un client pose une demande.
+  if (client) void reglerNotificationDemandes(client, true);
+  signalerDisponible();
+  return null;
+}
+
 /** E5 Profil prestataire (modèle 3 « Pseudo en titre »). */
 export function ProfilPrestataire() {
   const navigate = useNavigate();
+  const { state } = useLocation();
   const { client } = useMatrix();
   const bulles = useBulles(client);
   const [session] = useState(lireSession);
-  const [saisie, setSaisie] = useState<SaisieProfil>(() => ({
-    pseudo: session ? pseudoPropose(session.userId) : '',
-    metier: '',
-    zone: '',
-    recoit: false,
-    deplace: false,
-    services: LIGNES_VIDES,
-  }));
+  // On revient ici parce que le serveur a refusé : ce qui était tapé est rendu tel quel, avec le message.
+  const [echec] = useState(() => echecDepuis(state));
+  const [saisie, setSaisie] = useState<SaisieProfil>(
+    () =>
+      echec?.saisie ?? {
+        pseudo: session ? pseudoPropose(session.userId) : '',
+        metier: '',
+        zone: '',
+        recoit: false,
+        deplace: false,
+        services: LIGNES_VIDES,
+      },
+  );
   const [erreurs, setErreurs] = useState<ErreursProfil>({});
-  const [bandeau, setBandeau] = useState<string | null>(null);
+  const [bandeau, setBandeau] = useState<string | null>(echec?.message ?? null);
   const [chargement, setChargement] = useState(true);
   // undefined : pas encore touché SIA ici ; l'état vient alors du Mur (ou du téléphone en secours).
   const [choixVisible, setVisibleA] = useState<string | null | undefined>(undefined);
@@ -94,7 +151,7 @@ export function ProfilPrestataire() {
   // on l'enlève : l'écran retrouve tout seul l'état d'avant. null : rien n'est en route.
   const [attendu, setAttendu] = useState<{ visibleA: string | null } | null>(null);
   const [zoneSecours, setZoneSecours] = useState<string | null>(null);
-  const [modifie, setModifie] = useState(false);
+  const [modifie, setModifie] = useState(echec !== null);
   const [eteint, setEteint] = useState(false);
   const [edition, setEdition] = useState(false);
   const [focus, setFocus] = useState<'pseudo' | 'metier' | null>(null);
@@ -102,14 +159,6 @@ export function ProfilPrestataire() {
   const [photoOccupee, setPhotoOccupee] = useState(false);
   const champPseudo = useRef<HTMLInputElement>(null);
   const idPhrase = useId();
-  // Faux si on a quitté la page pendant l'envoi : on ne ramène alors personne au Mur.
-  const ici = useRef(false);
-  useEffect(() => {
-    ici.current = true;
-    return () => {
-      ici.current = false;
-    };
-  }, []);
 
   const urlPhoto = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(
@@ -139,22 +188,28 @@ export function ProfilPrestataire() {
           // Pas de profil prestataire : on reprend le pseudo déjà choisi (par exemple en client).
           lirePseudoEnregistre(session)
             .then((pseudo) => {
-              if (actif && pseudo) setSaisie((avant) => ({ ...avant, pseudo }));
+              if (actif && pseudo && !echec) setSaisie((avant) => ({ ...avant, pseudo }));
             })
             .catch(() => undefined);
           return;
         }
-        setSaisie(saisieDepuis(resultat.profil));
+        // Retour après un refus : on garde ce qui était tapé, pas la copie du serveur.
+        if (!echec) setSaisie(saisieDepuis(resultat.profil));
         if (lireDisponible()) setZoneSecours(resultat.profil.zone);
       });
     return () => {
       actif = false;
     };
-  }, [session, navigate]);
+  }, [session, navigate, echec]);
 
   useEffect(() => {
     if (edition) champPseudo.current?.focus();
   }, [edition]);
+
+  // L'échec est lu : on le retire de l'historique, pour qu'un retour arrière ne ramène pas un vieux message.
+  useEffect(() => {
+    if (echec) navigate(CHEMINS.profilPrestataire, { replace: true, state: null });
+  }, [echec, navigate]);
 
   if (!session) return <Navigate to={CHEMINS.accueil} replace />;
 
@@ -221,48 +276,18 @@ export function ProfilPrestataire() {
       setErreurs(verifie.erreurs);
       return;
     }
-    // Le bouton passe au vert tout de suite ; si le serveur refuse, il revient à son état d'avant.
-    setAttendu({ visibleA: verifie.profil.zone });
-    const resultat = await enregistrerProfil(session, verifie.profil).catch(() => ({
-      ok: false as const,
-      erreur: 'inconnue' as const,
-    }));
-    if (!resultat.ok) {
-      setAttendu(null);
-      if (resultat.erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
-      else setBandeau(MESSAGES[resultat.erreur]);
-      return;
-    }
-    const { pseudo, metier, zone, modalite, services } = verifie.profil;
-    // Profil enregistré : les écrans suivants (Mur, fiches) le savent tout de suite.
+    const { pseudo, zone } = verifie.profil;
+    // Les écrans suivants (Mur, fiches) savent tout de suite qui je suis, sans attendre le serveur.
     memoriserMoi(session.userId, { role: 'prestataire', pseudo, zone });
-    try {
-      await publierStatut(exigerClient(client), {
-        pseudo,
-        metier,
-        zone,
-        modalite,
-        ...(services.length > 0 ? { services } : {}),
-        fin: Date.now() + DUREE_MAX_ANNONCE_MS,
+    // Au Mur dès le toucher. Le serveur travaille derrière ; s'il refuse, on revient ici avec ce qui était tapé.
+    navigate(cheminMur());
+    const erreur = await enFile(() => mettreEnLigne(session, client, verifie.profil));
+    if (erreur === null) return;
+    if (erreur === 'session') navigate(CHEMINS.accueil, { replace: true });
+    else
+      navigate(CHEMINS.profilPrestataire, {
+        state: { echec: { message: MESSAGES[erreur], saisie } },
       });
-    } catch (e) {
-      setAttendu(null);
-      echecReseau(e);
-      return;
-    }
-    try {
-      ecrireDisponible(true);
-    } catch {
-      // Le statut est publié sur le Mur ; seul le secours du téléphone manque.
-    }
-    // Disponible : prévenir (même appli fermée) quand un client pose une demande.
-    if (client) void reglerNotificationDemandes(client, true);
-    signalerDisponible();
-    setModifie(false);
-    setEteint(false);
-    setVisibleA(verifie.profil.zone);
-    setAttendu(null);
-    if (ici.current) navigate(cheminMur());
   }
 
   async function choisirPhoto(fichier: File) {
