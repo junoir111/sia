@@ -27,6 +27,7 @@ import { RondInitiale } from '../../ui/RondInitiale';
 import { IconeChevron, IconeEnvoyer, IconeRetour } from '../../ui/icones';
 import { familleErreur } from '../profil-client/branchements';
 import { useBulles } from '../bulles/useBulles';
+import { EnregistrerClient } from './EnregistrerClient';
 import { autreDeLaBulle, tempsRestant, useMessages } from './messages';
 import type { Message } from './messages';
 import './bulle.css';
@@ -323,6 +324,7 @@ export function Bulle() {
           </p>
         )}
         {bulle && saine && <LaDemande bulle={bulle} />}
+        {client && saine && <EnregistrerClient client={client} roomId={roomId} />}
         {bulle && saine && (
           <p className="bulle__rappel">Chaque message s'efface 1 minute après lecture.</p>
         )}

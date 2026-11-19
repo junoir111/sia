@@ -141,3 +141,14 @@ export function IconeBulles({ taille = 24, className }: ProprietesIcone) {
     </svg>
   );
 }
+
+export function IconePersonnes({ taille = 24, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.7}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3 19.5c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+      <circle cx="17.2" cy="9" r="2.5" />
+      <path d="M17.5 14.2c2.3.2 3.9 1.9 3.9 4.3" />
+    </svg>
+  );
+}

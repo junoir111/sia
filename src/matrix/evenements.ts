@@ -4,12 +4,15 @@
  * fonctions de nettoyage de src/logique/ : rien de ce qui vient du réseau n'est cru sur parole.
  */
 
+import type { ClientsEnregistres } from '../logique/clients';
 import type { Modalite } from '../logique/profil';
 
 export const TYPE_ANNONCE = 'io.sia.annonce';
 export const TYPE_STATUT = 'io.sia.statut';
 export const TYPE_BULLE = 'io.sia.bulle';
 export const TYPE_FICHE = 'io.sia.fiche';
+/** Donnée de compte privée : la liste « Mes clients » du prestataire. */
+export const TYPE_CLIENTS = 'io.sia.clients';
 export const NOM_BULLE = 'SIA · Bulle';
 export const ALGORITHME_BULLE = 'm.megolm.v1.aes-sha2';
 
@@ -48,6 +51,9 @@ declare module 'matrix-js-sdk/lib/@types/event' {
   }
   interface StateEvents {
     'io.sia.bulle': ContenuEtatBulle;
+  }
+  interface AccountDataEvents {
+    'io.sia.clients': ClientsEnregistres;
   }
 }
 

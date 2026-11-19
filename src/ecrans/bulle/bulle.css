@@ -145,6 +145,54 @@
   overflow-wrap: anywhere;
 }
 
+/* Prestataire : « Enregistrer ce client » (liste « Mes clients »). */
+.bulle__client {
+  margin: 16px 0 0;
+  text-align: center;
+}
+
+.bulle__enregistrer {
+  min-height: var(--sia-toucher);
+  padding: 0 20px;
+  background: none;
+  border: 1px solid var(--sia-contour);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bulle__enregistrer:active {
+  background: var(--sia-carte);
+}
+
+.bulle__enregistrer:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.bulle__client--ok {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--sia-accent);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+}
+
+.bulle__client--ok a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.bulle__client-erreur {
+  margin: 8px 0 0;
+  color: var(--sia-alerte);
+  font-size: var(--sia-libelle);
+}
+
 .bulle__rappel {
   margin: 24px 0 16px;
   color: var(--sia-texte-doux);

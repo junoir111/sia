@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CHEMINS, cheminBulle } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
+import { verbeInvitation } from '../../logique/etat-bulle';
 import { formaterPrix } from '../../logique/profil';
 import { accepterOffre, refuserOffre } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
@@ -31,7 +32,7 @@ const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
 /** Petit texte d'état à droite de la ligne, et sa couleur. */
 function etatLigne(b: ResumeBulle): { texte: string; vif: boolean } {
   if (b.etat === 'invitation-recue') {
-    return { texte: b.invitationDirecte ? 'vous demande' : 'dit oui', vif: true };
+    return { texte: verbeInvitation(b), vif: true };
   }
   if (b.etat === 'en-attente') return { texte: 'en attente', vif: false };
   if (b.etat === 'fermee') return { texte: 'fermée', vif: false };

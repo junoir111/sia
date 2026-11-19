@@ -70,3 +70,15 @@ export function etatAffiche(e: {
   if (e.autreAppartenance !== 'join') return { etat: 'en-attente', texte: 'En attente' };
   return { etat: 'ouverte', texte: e.autreEcrit ? 'En train d’écrire…' : '' };
 }
+
+/**
+ * Ce que dit une invitation reçue, après « X (quartier) » : « dit oui » (offre à ma demande), « vous demande »
+ * (un client me demande directement) ou « vous écrit » (un prestataire m'écrit).
+ */
+export function verbeInvitation(b: {
+  invitationDirecte?: boolean;
+  invitationEcrit?: boolean;
+}): 'dit oui' | 'vous demande' | 'vous écrit' {
+  if (b.invitationEcrit) return 'vous écrit';
+  return b.invitationDirecte ? 'vous demande' : 'dit oui';
+}

@@ -1,0 +1,126 @@
+/* Mes clients — liste privée du prestataire. Même esprit que la liste des bulles (bulles.css). */
+.clients__titre {
+  margin: 0;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.clients__rappel {
+  margin: 8px 0 16px;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-aide);
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.clients__liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clients__ligne {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0 16px;
+}
+
+/* Trait fin sous chaque ligne, aligné sur le texte (pas sous le rond), sauf la dernière. */
+.clients__ligne:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 64px;
+  height: 1px;
+  background: var(--sia-ligne);
+}
+
+.clients__textes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.clients__pseudo,
+.clients__zone {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clients__pseudo {
+  font-size: var(--sia-corps);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.clients__zone {
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 22px;
+}
+
+.clients__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.clients__ecrire,
+.clients__retirer {
+  min-height: var(--sia-toucher);
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  font-size: var(--sia-libelle);
+  cursor: pointer;
+}
+
+.clients__ecrire {
+  padding: 0 24px;
+  background: var(--sia-accent);
+  color: var(--sia-sur-accent);
+  font-weight: 600;
+}
+
+.clients__ecrire:disabled {
+  background: var(--sia-carte);
+  color: var(--sia-eteint);
+  cursor: default;
+}
+
+.clients__retirer {
+  padding: 0 12px;
+  background: none;
+  color: var(--sia-texte-doux);
+  font-weight: 500;
+}
+
+.clients__retirer:disabled {
+  color: var(--sia-eteint);
+  cursor: default;
+}
+
+.clients__ecrire:focus-visible,
+.clients__retirer:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.clients__vide {
+  margin: 32px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  text-align: center;
+}
+
+.clients .deconnexion {
+  margin-top: 32px;
+}

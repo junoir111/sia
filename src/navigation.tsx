@@ -7,6 +7,7 @@ import { Bandeau } from './ecrans/bandeau/Bandeau';
 import { Bientot } from './ecrans/bientot/Bientot';
 import { Bulle } from './ecrans/bulle/Bulle';
 import { Bulles } from './ecrans/bulles/Bulles';
+import { MesClients } from './ecrans/clients/MesClients';
 import { Connexion } from './ecrans/connexion/Connexion';
 import { FicheDemande } from './ecrans/fiche-demande/FicheDemande';
 import { FichePrestataire } from './ecrans/fiche-prestataire/FichePrestataire';
@@ -46,6 +47,14 @@ export function RoutesSia() {
         element={
           <Garde>
             <Bulles />
+          </Garde>
+        }
+      />
+      <Route
+        path={CHEMINS.clients}
+        element={
+          <Garde>
+            <MesClients />
           </Garde>
         }
       />

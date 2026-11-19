@@ -13,6 +13,8 @@ export const CHEMINS = {
   fichePrestataire: '/mur/prestataire/:eventId',
   ficheDemande: '/mur/demande/:eventId',
   bulles: '/bulles',
+  /** « Mes clients » : la liste privée du prestataire. */
+  clients: '/clients',
   /** Motif de route ; pour un lien, utiliser cheminBulle(roomId). */
   bulle: '/bulle/:roomId',
 } as const;

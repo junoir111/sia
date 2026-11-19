@@ -124,6 +124,23 @@ describe('Écran Bulles (M3)', () => {
     expect(screen.getByText('dit oui')).toBeInTheDocument();
   });
 
+  it('un prestataire t’écrit : « vous écrit » dans la liste, Non / Oui sous la ligne', async () => {
+    vi.mocked(listerBulles).mockReturnValue([
+      {
+        ...bulle({ roomId: '!e:sia', pseudo: 'mangue', etat: 'invitation-recue' }),
+        demande: null,
+        invitationDirecte: true,
+        invitationEcrit: true,
+      },
+    ]);
+    afficher();
+    expect(screen.getByText('vous écrit')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /mangue/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(await screen.findByText('écran bulle')).toBeInTheDocument();
+    expect(accepterOffre).toHaveBeenCalledWith(CLIENT, '!e:sia');
+  });
+
   it('offre reçue : Non la refuse', async () => {
     vi.mocked(listerBulles).mockReturnValue([
       bulle({ roomId: '!o:sia', pseudo: 'mangue', etat: 'invitation-recue' }),

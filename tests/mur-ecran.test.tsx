@@ -286,8 +286,22 @@ describe('Écrans du Mur', () => {
         CHEMINS.bulles,
       );
       expect(within(panneau).getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
+      // « Mes clients » est réservé aux prestataires.
+      expect(within(panneau).queryByRole('link', { name: /Mes clients/ })).not.toBeInTheDocument();
       fireEvent.click(within(panneau).getByRole('button', { name: 'Fermer' }));
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('Mon compte : un prestataire a le lien « Mes clients »', async () => {
+      vi.mocked(lireProfil).mockResolvedValue(PROFIL_PRESTA);
+      afficher(CHEMINS.mur);
+      await screen.findByRole('link', { name: 'Je suis disponible' });
+      fireEvent.click(screen.getByRole('button', { name: 'Mon compte' }));
+      const panneau = screen.getByRole('dialog');
+      expect(within(panneau).getByRole('link', { name: /Mes clients/ })).toHaveAttribute(
+        'href',
+        CHEMINS.clients,
+      );
     });
 
     it('sans réseau : bandeau qui dit quoi faire', () => {

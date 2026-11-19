@@ -5,7 +5,7 @@ import { CHEMINS } from '../../chemins';
 import { statutNotifications, surStatutNotifications } from '../../matrix/notifications';
 import { BoutonDeconnexion } from '../../ui/BoutonDeconnexion';
 import { RondInitiale } from '../../ui/RondInitiale';
-import { IconeBulles, IconeChevron } from '../../ui/icones';
+import { IconeBulles, IconeChevron, IconePersonnes } from '../../ui/icones';
 import type { Moi } from './useMoi';
 
 type Proprietes = {
@@ -59,6 +59,15 @@ export function MonCompte({ pseudo, moi, nouveautes, onFermer }: Proprietes) {
             <li>
               <Link className="compte__lien" to={cheminProfil}>
                 <span>Mon profil</span>
+                <IconeChevron />
+              </Link>
+            </li>
+          )}
+          {moi?.role === 'prestataire' && (
+            <li>
+              <Link className="compte__lien" to={CHEMINS.clients}>
+                <IconePersonnes className="compte__icone" />
+                <span>Mes clients</span>
                 <IconeChevron />
               </Link>
             </li>

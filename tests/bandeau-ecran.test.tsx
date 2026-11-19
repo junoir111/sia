@@ -177,6 +177,21 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
     expect(screen.queryByText(/dit oui/)).not.toBeInTheDocument();
   });
 
+  it('un prestataire t’écrit : le bandeau dit « vous écrit » et Oui ouvre la bulle', async () => {
+    afficher();
+    act(() =>
+      bullesChangent([
+        { ...offre('!e:sia', 'mangue-douce'), invitationDirecte: true, invitationEcrit: true },
+      ]),
+    );
+    expect(screen.getByText('mangue-douce (Owendo) vous écrit')).toBeInTheDocument();
+    expect(screen.getByText('Tu veux discuter ?')).toBeInTheDocument();
+    expect(screen.queryByText(/vous demande|dit oui/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
+    expect(await screen.findByText('écran bulle')).toBeInTheDocument();
+    expect(accepterOffre).toHaveBeenCalledWith(CLIENT, '!e:sia');
+  });
+
   it('client : Oui prévient la page client que le choix est fait', async () => {
     const surChoix = vi.fn();
     window.addEventListener('sia:choisi', surChoix);

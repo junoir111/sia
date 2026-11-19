@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { etatAffiche, nettoyerEtatBulle, type EtatBulle } from '../src/logique/etat-bulle';
+import {
+  etatAffiche,
+  nettoyerEtatBulle,
+  verbeInvitation,
+  type EtatBulle,
+} from '../src/logique/etat-bulle';
 
 const CLIENT = '@palmier-48:sia.tail94dc60.ts.net';
 const PRESTA = '@mangue-douce:sia.tail94dc60.ts.net';
@@ -101,5 +106,17 @@ describe('etatAffiche', () => {
     expect(cas('invite', 'leave')).toEqual(fermee);
     expect(cas(undefined, 'join')).toEqual(fermee);
     expect(cas('bizarre', 'join')).toEqual(fermee);
+  });
+});
+
+describe('verbeInvitation', () => {
+  it('« dit oui » pour une offre à ma demande', () => {
+    expect(verbeInvitation({})).toBe('dit oui');
+  });
+  it('« vous demande » pour un client qui me demande directement', () => {
+    expect(verbeInvitation({ invitationDirecte: true })).toBe('vous demande');
+  });
+  it('« vous écrit » pour un prestataire qui m’écrit', () => {
+    expect(verbeInvitation({ invitationDirecte: true, invitationEcrit: true })).toBe('vous écrit');
   });
 });

@@ -6,7 +6,7 @@ import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { lireDisponible } from '../../appareil/disponible';
 import { texteBandeau } from '../../logique/demande';
 import { doitNotifier } from '../../logique/notification';
-import type { ParticipantBulle } from '../../logique/etat-bulle';
+import { verbeInvitation, type ParticipantBulle } from '../../logique/etat-bulle';
 import { accepterOffre, direOui, refuserOffre } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { demandesActives, ecouterDemandes, monStatutActif } from '../../matrix/mur';
@@ -74,11 +74,16 @@ function vueDe(a: Alerte): VueAlerte {
       : { cle: a.cle, nom: 'Nouveau message', ligne: `Nouveau message de ${pseudo}` };
   }
   const { pseudo, zone } = a.bulle.autre;
-  const direct = a.bulle.invitationDirecte === true;
+  const verbe = verbeInvitation(a.bulle);
+  const noms = {
+    'dit oui': 'Nouvelle offre',
+    'vous demande': 'Nouvelle demande directe',
+    'vous écrit': 'Nouveau contact',
+  };
   return {
     cle: a.cle,
-    nom: direct ? 'Nouvelle demande directe' : 'Nouvelle offre',
-    ligne: `${pseudo} (${zone}) ${direct ? 'vous demande' : 'dit oui'}`,
+    nom: noms[verbe],
+    ligne: `${pseudo} (${zone}) ${verbe}`,
     question: 'Tu veux discuter ?',
   };
 }
