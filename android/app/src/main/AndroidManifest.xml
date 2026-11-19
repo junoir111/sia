@@ -27,14 +27,31 @@
 
         </activity>
 
-        <!-- Reçoit les signaux du distributeur UnifiedPush (ntfy). Non exporté, comme l'exige la bibliothèque. -->
+        <!-- Reçoit les événements de Firebase Cloud Messaging (nouveau jeton, signal). Non exporté. -->
         <service
             android:name=".SiaPushService"
             android:exported="false">
             <intent-filter>
-                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Notification neutre : canal et icône de SIA. Firebase ne s'allume qu'à la connexion (SiaPushPlugin.activer). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sia_nouveautes" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

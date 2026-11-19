@@ -74,9 +74,9 @@ export function MonCompte({ pseudo, moi, nouveautes, onFermer }: Proprietes) {
             </Link>
           </li>
         </ul>
-        {notifications === 'sans-distributeur' && (
+        {notifications === 'indisponible' && (
           <p className="compte__info" role="status">
-            Installe l'appli ntfy pour être prévenu.
+            Les notifications ne marchent pas sur ce téléphone : il leur faut les services Google.
           </p>
         )}
         {notifications === 'autorisation-refusee' && (

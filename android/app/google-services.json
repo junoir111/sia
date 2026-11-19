@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "322832581255",
+    "project_id": "sia-discret-2026",
+    "storage_bucket": "sia-discret-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:322832581255:android:b8e49d32297564553a6e22",
+        "android_client_info": {
+          "package_name": "io.github.junoir111.sia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRQQV5T0XnRxnmG6k9z4IamhAMzZ1x_HY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

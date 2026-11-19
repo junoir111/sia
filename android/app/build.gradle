@@ -43,8 +43,12 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    // Notifications sans Firebase : bibliothèque officielle UnifiedPush (distributeur : ntfy).
-    implementation "org.unifiedpush.android:connector:3.3.5"
+    // Notifications : Firebase Cloud Messaging (Google). Les signaux ne contiennent AUCUN texte (passerelle du serveur).
+    implementation platform('com.google.firebase:firebase-bom:35.2.0')
+    implementation 'com.google.firebase:firebase-messaging'
+    // Utilisées directement par SiaPushPlugin (présence de Google Play services, tâches asynchrones) : déclarées pour la compilation.
+    implementation 'com.google.android.gms:play-services-base:18.11.1'
+    implementation 'com.google.android.gms:play-services-tasks:18.4.1'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -52,3 +56,13 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Notifications : le plugin Google n'est appliqué que si google-services.json est présent (sinon l'appli marche, sans notification).
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch (Exception e) {
+    logger.info("google-services.json absent : plugin Google non appliqué, pas de notifications.")
+}

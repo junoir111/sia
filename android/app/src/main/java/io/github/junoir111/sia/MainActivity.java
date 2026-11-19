@@ -18,4 +18,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SiaPushPlugin.class);
         super.onCreate(savedInstanceState);
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Les notifications ne disent que « du nouveau » : inutiles une fois l'appli ouverte.
+        SiaPushNotification.retirerTout(this);
+    }
 }

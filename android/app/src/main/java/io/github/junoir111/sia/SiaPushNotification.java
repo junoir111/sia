@@ -11,8 +11,9 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 /**
- * Notification LOCALE et NEUTRE : titre « SIA », texte fixe « Du nouveau ». Aucun contenu du signal reçu n'est lu ni affiché
+ * Notification NEUTRE : titre « SIA », texte fixe « Du nouveau ». Aucun contenu du signal reçu n'est lu ni affiché
  * (PRD F12 : jamais de texte de message). Visibilité privée sur l'écran verrouillé. Une seule notification, remplacée à chaque signal.
+ * Le canal « sia_nouveautes » doit exister AVANT l'arrivée d'une notification envoyée par Google (la passerelle le nomme).
  */
 final class SiaPushNotification {
     static final String CANAL = "sia_nouveautes";
@@ -22,7 +23,8 @@ final class SiaPushNotification {
 
     private SiaPushNotification() {}
 
-    private static void creerCanal(Context contexte) {
+    /** Crée le canal (sans effet s'il existe déjà). */
+    static void creerCanal(Context contexte) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationChannel canal =
                 new NotificationChannel(CANAL, "Nouveautés", NotificationManager.IMPORTANCE_DEFAULT);
@@ -63,5 +65,10 @@ final class SiaPushNotification {
 
     static void retirer(Context contexte) {
         NotificationManagerCompat.from(contexte).cancel(IDENTIFIANT);
+    }
+
+    /** Toutes les notifications de SIA (celles de Google comprises) : elles ne disent que « du nouveau », inutiles une fois l'appli ouverte. */
+    static void retirerTout(Context contexte) {
+        NotificationManagerCompat.from(contexte).cancelAll();
     }
 }

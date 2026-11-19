@@ -16,5 +16,8 @@ export const ALIAS_MUR = '#sia-mur:sia.tail94dc60.ts.net';
 /** Identifiant de l'appli côté notifications (celui d'Android). */
 export const APP_ID_PUSH = 'io.github.junoir111.sia';
 
-/** Passerelle Matrix de ntfy (notifications sans Firebase). Même nom de serveur, port 8443. */
-export const URL_PASSERELLE_PUSH = 'https://sia.tail94dc60.ts.net:8443/_matrix/push/v1/notify';
+/**
+ * Passerelle de notifications de SIA (sur le serveur de la maison) : reçoit le signal de Tuwunel et le transmet à Firebase,
+ * sans aucun texte. Port 8444 = réseau privé Tailscale seulement (pas Internet) : seul le serveur lui-même l'appelle.
+ */
+export const URL_PASSERELLE_PUSH = 'https://sia.tail94dc60.ts.net:8444/_matrix/push/v1/notify';

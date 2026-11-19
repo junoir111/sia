@@ -1,16 +1,17 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 /*
- * Pont vers le petit plugin Android « SiaPush » (UnifiedPush, sans Firebase).
+ * Pont vers le petit plugin Android « SiaPush » (Firebase Cloud Messaging).
  * Absent dans le navigateur : `pushNatif()` rend alors null et rien ne se passe.
  */
 
-export type StatutActivation = 'ok' | 'sans-distributeur' | 'autorisation-refusee';
+/** `indisponible` : pas de services Google sur ce téléphone, ou Firebase non configuré dans cette version. */
+export type StatutActivation = 'ok' | 'indisponible' | 'autorisation-refusee';
 
 export type EtatPushNatif = {
-  distributeurs: string[];
-  distributeur: string | null;
-  endpoint: string | null;
+  /** Jeton de notification déjà reçu de Google, ou null. */
+  jeton: string | null;
+  disponible: boolean;
 };
 
 export type PushNatif = {
@@ -18,11 +19,11 @@ export type PushNatif = {
   activer(): Promise<{ statut: StatutActivation }>;
   desactiver(): Promise<void>;
   addListener(
-    evenement: 'endpoint',
-    action: (donnees: { endpoint: string }) => void,
+    evenement: 'jeton',
+    action: (donnees: { jeton: string }) => void,
   ): Promise<{ remove: () => Promise<void> }>;
   addListener(
-    evenement: 'desinscrit' | 'echec',
+    evenement: 'echec',
     action: () => void,
   ): Promise<{ remove: () => Promise<void> }>;
 };

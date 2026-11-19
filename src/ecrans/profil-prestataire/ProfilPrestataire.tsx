@@ -19,6 +19,7 @@ import type {
   SaisieProfil,
 } from '../../logique/profil';
 import { monStatutActif, publierStatut, retirerStatut } from '../../matrix/mur';
+import { reglerNotificationDemandes } from '../../matrix/notifications';
 import { enregistrerProfil, lireProfil, lirePseudoEnregistre } from '../../matrix/profil';
 import type { ErreurProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
@@ -201,6 +202,8 @@ export function ProfilPrestataire() {
     } catch {
       // Le Mur est à jour ; seul le secours du téléphone n'a pas pu être écrit.
     }
+    // Plus disponible : plus de notification pour les demandes des clients.
+    if (client) void reglerNotificationDemandes(client, false);
     setVisibleA(null);
     setEteint(true);
     setAttendu(null);
@@ -252,6 +255,8 @@ export function ProfilPrestataire() {
     } catch {
       // Le statut est publié sur le Mur ; seul le secours du téléphone manque.
     }
+    // Disponible : prévenir (même appli fermée) quand un client pose une demande.
+    if (client) void reglerNotificationDemandes(client, true);
     signalerDisponible();
     setModifie(false);
     setEteint(false);
