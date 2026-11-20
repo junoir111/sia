@@ -9,13 +9,13 @@
  * sinon touche la flèche du haut. Rend faux s'il n'y a rien à toucher (page de départ, profil sans flèche).
  * Une fenêtre qui ne peut pas se fermer (action en cours) garde le retour : on ne quitte pas l'écran pendant l'envoi.
  */
-export function reculerSurEcran(doc: Document = document): boolean {
-  const voile = doc.querySelector<HTMLElement>('.feuille__voile');
+export function reculerSurEcran(racine: ParentNode = document): boolean {
+  const voile = racine.querySelector<HTMLElement>('.feuille__voile');
   if (voile) {
     voile.click();
     return true;
   }
-  const fleche = doc.querySelector<HTMLElement>('.retour');
+  const fleche = racine.querySelector<HTMLElement>('.retour');
   if (fleche) {
     fleche.click();
     return true;

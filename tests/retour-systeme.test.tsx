@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { App } from '@capacitor/app';
 import { reculerSurEcran } from '../src/appareil/retour-systeme';
+import { definirCode, deverrouiller, verrouiller } from '../src/appareil/verrou';
 import { CHEMINS, cheminMur } from '../src/chemins';
 import { RetourSysteme } from '../src/coquille/RetourSysteme';
+import { enregistrerSession } from '../src/matrix/session';
 import { LienRetour } from '../src/ui/LienRetour';
 
 // Jamais le vrai téléphone : le plugin « App » de Capacitor est simulé.
@@ -155,7 +157,105 @@ describe('Bouton retour du téléphone (Android)', () => {
   });
 });
 
+/** L'écran du code, tel que la porte l'affiche : une zone « code » avec, au besoin, sa fenêtre « Code oublié ? ». */
+function EcranDuCode({ avecFenetre }: { avecFenetre: boolean }) {
+  const [fenetre, setFenetre] = useState(avecFenetre);
+  return (
+    <main className="code">
+      <p>écran du code</p>
+      {fenetre && (
+        <div className="feuille">
+          <div className="feuille__voile" aria-hidden="true" onClick={() => setFenetre(false)} />
+          <div role="dialog" aria-label="Code oublié ?">
+            Contenu de la fenêtre du code
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+describe('Bouton retour du téléphone quand la porte est fermée', () => {
+  beforeEach(async () => {
+    faux.ecoute = null;
+    faux.plateforme = 'android';
+    faux.retirer.mockClear();
+    vi.mocked(App.addListener).mockClear();
+    vi.mocked(App.exitApp).mockClear();
+    localStorage.clear();
+    deverrouiller();
+    enregistrerSession({ userId: '@puma:sia', accessToken: 'jeton', deviceId: 'APP' });
+    await definirCode('4821');
+    verrouiller();
+  });
+  afterEach(() => {
+    localStorage.clear();
+    deverrouiller();
+  });
+
+  /** Une page cachée derrière (avec sa flèche et sa fenêtre) et l'écran du code par-dessus. */
+  function afficherPorteFermee(avecFenetre: boolean) {
+    return render(
+      <MemoryRouter initialEntries={['/mur/metier/Plombier']}>
+        <RetourSysteme />
+        <Routes>
+          <Route path={CHEMINS.mur} element={<p>écran mur</p>} />
+          <Route path={CHEMINS.listeMetier} element={<PageListe />} />
+        </Routes>
+        <EcranDuCode avecFenetre={avecFenetre} />
+      </MemoryRouter>,
+    );
+  }
+
+  it('il quitte l’appli, sans toucher à la flèche de l’écran caché derrière', async () => {
+    afficherPorteFermee(false);
+    await vi.waitFor(() => expect(faux.ecoute).not.toBeNull());
+    retourDuTelephone();
+    expect(App.exitApp).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('écran liste')).toBeInTheDocument();
+    expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
+  });
+
+  it('la fenêtre « Code oublié ? » se ferme d’abord ; l’appui suivant quitte l’appli', async () => {
+    afficherPorteFermee(true);
+    await vi.waitFor(() => expect(faux.ecoute).not.toBeNull());
+    retourDuTelephone();
+    expect(screen.queryByRole('dialog', { name: 'Code oublié ?' })).not.toBeInTheDocument();
+    expect(App.exitApp).not.toHaveBeenCalled();
+    retourDuTelephone();
+    expect(App.exitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('une fenêtre restée ouverte dans l’écran caché n’est pas touchée', async () => {
+    afficherPorteFermee(false);
+    await vi.waitFor(() => expect(faux.ecoute).not.toBeNull());
+    act(() => screen.getByRole('button', { name: 'Ouvrir la fenêtre' }).click());
+    retourDuTelephone();
+    expect(screen.getByRole('dialog', { name: 'Fenêtre' })).toBeInTheDocument();
+    expect(App.exitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('la porte rouverte, le retour redevient celui de la flèche', async () => {
+    afficherPorteFermee(false);
+    await vi.waitFor(() => expect(faux.ecoute).not.toBeNull());
+    act(() => deverrouiller());
+    retourDuTelephone();
+    expect(screen.getByText('écran mur')).toBeInTheDocument();
+    expect(App.exitApp).not.toHaveBeenCalled();
+  });
+});
+
 describe('reculerSurEcran', () => {
+  it('ne cherche que dans la zone donnée', () => {
+    document.body.innerHTML =
+      '<a class="retour" href="#/x">Retour</a><main class="code"><p>code</p></main>';
+    const zone = document.querySelector<HTMLElement>('.code');
+    const clic = vi.fn((e: Event) => e.preventDefault());
+    document.querySelector('.retour')?.addEventListener('click', clic);
+    expect(zone && reculerSurEcran(zone)).toBe(false);
+    expect(clic).not.toHaveBeenCalled();
+  });
+
   it('rend faux et ne touche à rien quand l’écran n’a ni flèche ni fenêtre', () => {
     document.body.innerHTML = '<main><p>Le Mur</p></main>';
     expect(reculerSurEcran()).toBe(false);

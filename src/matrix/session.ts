@@ -2,7 +2,8 @@ import type { Session } from './auth';
 
 /*
  * Session gardée dans localStorage, en clair.
- * À REVOIR à l'étape 8 (code secret) : le jeton d'accès devra être protégé.
+ * Limite assumée (PRD F12) : le code à 4 chiffres (appareil/verrou.ts) écarte un curieux qui a l'appli en main,
+ * pas quelqu'un qui lit les fichiers du téléphone, qui y trouverait ce jeton.
  */
 
 const CLE_STOCKAGE = 'sia.session';

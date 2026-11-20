@@ -1,11 +1,17 @@
 // F1 — Créer son compte : règles du formulaire d'inscription (sans écran, sans réseau).
 
-export type ChampInscription = 'identifiant' | 'motDePasse' | 'confirmation' | 'code' | 'majeur';
+import { codeValide } from './code-secret';
+
+export type ChampInscription =
+  'identifiant' | 'motDePasse' | 'confirmation' | 'codeSecret' | 'code' | 'majeur';
 
 export type ValeursInscription = {
   identifiant: string;
   motDePasse: string;
   confirmation: string;
+  /** Code secret à 4 chiffres : il verrouille l'appli (F12), il reste sur le téléphone. */
+  codeSecret: string;
+  /** Code d'invitation donné par la personne qui invite. */
   code: string;
   majeur: boolean;
 };
@@ -31,6 +37,9 @@ export function verifierInscription(v: ValeursInscription): ErreursInscription {
   }
   if (v.confirmation !== v.motDePasse) {
     erreurs.confirmation = 'Les deux mots de passe ne sont pas pareils.';
+  }
+  if (!codeValide(v.codeSecret)) {
+    erreurs.codeSecret = 'Ton code secret a 4 chiffres.';
   }
   if (v.code.trim() === '') {
     erreurs.code = "Écris ton code d'invitation.";
@@ -60,6 +69,7 @@ export function formulaireComplet(v: ValeursInscription): boolean {
     v.identifiant.trim() !== '' &&
     v.motDePasse !== '' &&
     v.confirmation !== '' &&
+    v.codeSecret !== '' &&
     v.code.trim() !== '' &&
     v.majeur
   );

@@ -59,6 +59,7 @@ describe('deconnecter : effacements en attente', () => {
     );
     localStorage.setItem('sia.annuaire', '[]');
     localStorage.setItem('sia.appareils', '{}');
+    localStorage.setItem('sia.verrou', '{"sel":"abcd"}');
     localStorage.setItem(
       'sia.alertes',
       JSON.stringify({ ouvertures: { [BULLE]: 'attente' }, messages: { [BULLE]: 2 } }),
@@ -72,6 +73,8 @@ describe('deconnecter : effacements en attente', () => {
     expect(localStorage.getItem('sia.appareils')).toBeNull();
     // Mémoire des alertes de bulle : rien ne reste pour le prochain compte de ce téléphone.
     expect(localStorage.getItem('sia.alertes')).toBeNull();
+    // Le code secret de ce téléphone s'en va aussi : « Code oublié ? » = se déconnecter, puis en choisir un nouveau.
+    expect(localStorage.getItem('sia.verrou')).toBeNull();
   });
 
   it('n’attend pas plus de 10 s un serveur muet', async () => {
@@ -133,7 +136,10 @@ describe('deconnecter : effacements en attente', () => {
   it('retire aussi la demande gardée par ce téléphone', async () => {
     const c = fauxClient([murAvecMesPublications()]);
     faux.client = c;
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
     localStorage.setItem(
       'sia.demande',
       JSON.stringify({

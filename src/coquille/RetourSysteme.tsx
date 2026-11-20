@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { reculerSurEcran } from '../appareil/retour-systeme';
 import { CHEMINS } from '../chemins';
+import { porteActuelle } from './porte';
 
 /** Pages de départ : le retour y quitte l'appli, comme partout sur Android. */
 const PAGES_DE_DEPART: ReadonlySet<string> = new Set([CHEMINS.accueil, CHEMINS.mur]);
@@ -25,6 +26,14 @@ export function RetourSysteme() {
   useEffect(() => {
     if (Capacitor.getPlatform() !== 'android') return;
     const poignee = App.addListener('backButton', () => {
+      if (porteActuelle() !== 'ouverte') {
+        // Écran du code : pas de flèche, les écrans cachés derrière ne bougent pas. Seule la fenêtre
+        // « Code oublié ? » se referme ; sinon on quitte (la porte sera fermée à la prochaine ouverture).
+        const code = document.querySelector<HTMLElement>('.code');
+        if (code && reculerSurEcran(code)) return;
+        void App.exitApp();
+        return;
+      }
       if (reculerSurEcran()) return;
       const { navigate: aller, pathname: page } = courant.current;
       if (PAGES_DE_DEPART.has(page)) void App.exitApp();

@@ -3,6 +3,7 @@ import { CHEMINS } from './chemins';
 import { FournisseurMatrix, useMatrix } from './coquille/FournisseurMatrix';
 import { Garde } from './coquille/Garde';
 import { RetourSysteme } from './coquille/RetourSysteme';
+import { VerrouAppli } from './coquille/VerrouAppli';
 import { Accueil } from './ecrans/accueil/Accueil';
 import { Bandeau } from './ecrans/bandeau/Bandeau';
 import { Bientot } from './ecrans/bientot/Bientot';
@@ -114,9 +115,11 @@ function BandeauSiPret() {
 export function AppSia() {
   return (
     <FournisseurMatrix>
-      <BandeauSiPret />
       <RetourSysteme />
-      <RoutesSia />
+      <VerrouAppli>
+        <BandeauSiPret />
+        <RoutesSia />
+      </VerrouAppli>
     </FournisseurMatrix>
   );
 }

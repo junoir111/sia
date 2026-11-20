@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useNavigate, useParams } from 'react-router-dom';
+import { deverrouiller } from '../src/appareil/verrou';
 import { CHEMINS, cheminBulle } from '../src/chemins';
 import { cheminApresConnexion } from '../src/coquille/apres-connexion';
 import { useMatrix } from '../src/coquille/FournisseurMatrix';
@@ -58,8 +59,18 @@ vi.mock('../src/ecrans/connexion/Connexion', () => ({
 
 const SESSION = { userId: '@puma:sia.tail94dc60.ts.net', accessToken: 'jeton', deviceId: 'APP' };
 
+// Le téléphone a déjà un code, déjà tapé : la porte de l'appli est ouverte (la porte a ses propres tests).
+const CODE_DEJA_TAPE = {
+  sel: 'ab',
+  empreinte: 'cd',
+  iterations: 100_000,
+  essais: { echecs: 0, attenteJusqua: 0 },
+};
+
 function connecte() {
   localStorage.setItem('sia.session', JSON.stringify(SESSION));
+  localStorage.setItem('sia.verrou', JSON.stringify(CODE_DEJA_TAPE));
+  deverrouiller();
 }
 
 function afficher(adresse: string) {

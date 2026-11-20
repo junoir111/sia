@@ -152,3 +152,12 @@ export function IconePersonnes({ taille = 24, className }: ProprietesIcone) {
     </svg>
   );
 }
+
+export function IconeEffacer({ taille = 24, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.8}>
+      <path d="M9 5h10.5A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-6.5Z" />
+      <path d="m12.5 9.5 5 5m0-5-5 5" />
+    </svg>
+  );
+}

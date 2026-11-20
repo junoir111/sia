@@ -8,11 +8,13 @@ import {
   normaliserIdentifiant,
   verifierInscription,
 } from '../../logique/inscription';
+import { nettoyerSaisieCode } from '../../logique/code-secret';
 import type {
   ChampInscription,
   ErreursInscription,
   ValeursInscription,
 } from '../../logique/inscription';
+import { definirCode } from '../../appareil/verrou';
 import { creerCompte } from '../../matrix/auth';
 import type { ErreurInscription, ResultatInscription } from '../../matrix/auth';
 import { enregistrerSession } from '../../matrix/session';
@@ -27,6 +29,7 @@ const VIDE: ValeursInscription = {
   identifiant: '',
   motDePasse: '',
   confirmation: '',
+  codeSecret: '',
   code: '',
   majeur: false,
 };
@@ -94,20 +97,24 @@ export function Inscription() {
       valeurs.motDePasse,
       jeton,
     ).catch((): ResultatInscription => ({ ok: false, erreur: 'inconnue' }));
-    setEnvoiEnCours(false);
 
     if (resultat.ok) {
       try {
         enregistrerSession(resultat.session);
       } catch {
         // Compte créé mais téléphone incapable de garder la session : on le dit au lieu de rester bloqué.
+        setEnvoiEnCours(false);
         setBandeau('Ton compte est créé, mais le téléphone refuse de le garder. Connecte-toi.');
         return;
       }
+      // Le code choisi ici verrouille l'appli. Le bouton reste occupé pendant son calcul (pas de deuxième envoi).
+      // Si le téléphone refuse de le garder, l'écran « Choisis ton code » le redemandera.
+      await definirCode(valeurs.codeSecret).catch(() => undefined);
       navigate(cheminApresInscription(role));
       return;
     }
 
+    setEnvoiEnCours(false);
     const reponse = REPONSES_SERVEUR[resultat.erreur];
     if ('bandeau' in reponse) {
       setBandeau(reponse.message);
@@ -158,6 +165,18 @@ export function Inscription() {
             erreur={erreurs.confirmation}
             secret
             autoComplete="new-password"
+          />
+          <Champ
+            libelle="Code secret (4 chiffres)"
+            valeur={valeurs.codeSecret}
+            onChange={(v) => modifier('codeSecret', nettoyerSaisieCode(v))}
+            aide="Il verrouille SIA à chaque ouverture. Retiens-le bien."
+            erreur={erreurs.codeSecret}
+            secret
+            nomSecret="le code"
+            inputMode="numeric"
+            maxLength={4}
+            autoComplete="off"
           />
           <Champ
             libelle="Code d'invitation"

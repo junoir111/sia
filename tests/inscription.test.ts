@@ -12,6 +12,7 @@ const valides: ValeursInscription = {
   identifiant: 'abel',
   motDePasse: 'motdepasse',
   confirmation: 'motdepasse',
+  codeSecret: '4821',
   code: 'invitation',
   majeur: true,
 };
@@ -96,6 +97,19 @@ describe('verifierInscription', () => {
     });
   });
 
+  describe('code secret (4 chiffres, il verrouille l’appli)', () => {
+    it('accepte 4 chiffres, zéros compris', () => {
+      expect(verifierInscription(avec({ codeSecret: '0000' })).codeSecret).toBeUndefined();
+      expect(verifierInscription(avec({ codeSecret: '9081' })).codeSecret).toBeUndefined();
+    });
+
+    it.each(['', '123', '12345', '12a4', '12 4', 'abcd'])('refuse « %s »', (codeSecret) => {
+      expect(verifierInscription(avec({ codeSecret })).codeSecret).toBe(
+        'Ton code secret a 4 chiffres.',
+      );
+    });
+  });
+
   describe('code', () => {
     it('refuse un code vide ou fait d’espaces', () => {
       expect(verifierInscription(avec({ code: '' })).code).toBeTruthy();
@@ -116,11 +130,12 @@ describe('verifierInscription', () => {
       identifiant: '',
       motDePasse: '',
       confirmation: 'x',
+      codeSecret: '',
       code: '',
       majeur: false,
     });
     expect(Object.keys(erreurs).sort()).toEqual(
-      ['code', 'confirmation', 'identifiant', 'majeur', 'motDePasse'].sort(),
+      ['code', 'codeSecret', 'confirmation', 'identifiant', 'majeur', 'motDePasse'].sort(),
     );
   });
 });
@@ -134,6 +149,7 @@ describe('formulaireComplet', () => {
     ['identifiant vide', { identifiant: '  ' }],
     ['mot de passe vide', { motDePasse: '' }],
     ['confirmation vide', { confirmation: '' }],
+    ['code secret vide', { codeSecret: '' }],
     ['code vide', { code: '  ' }],
     ['case non cochée', { majeur: false }],
   ])('est faux avec %s', (_nom, changement) => {

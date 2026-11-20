@@ -1,0 +1,193 @@
+/* Écran du code secret (F12) : 4 ronds, clavier de chiffres, lien de sortie. */
+.code {
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.code__haut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+}
+
+.code__marque {
+  display: flex;
+  align-items: baseline;
+  margin: 0 0 24px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  /* L'espacement des lettres laisse 4 px après le « A » : on le reprend avec la marge du point. */
+  letter-spacing: 4px;
+}
+
+.code__point {
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: var(--sia-rayon-rond);
+  background: var(--sia-accent);
+}
+
+.code__titre {
+  margin: 0;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.code__aide {
+  max-width: 300px;
+  margin: 8px 0 0;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  line-height: 20px;
+}
+
+.code__milieu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.code__ronds {
+  display: flex;
+  gap: 20px;
+}
+
+.code__rond {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--sia-case);
+  border-radius: var(--sia-rayon-rond);
+  transition:
+    background-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code__rond--plein {
+  background: var(--sia-accent);
+  border-color: var(--sia-accent);
+}
+
+.code__ronds--faux {
+  animation: code-secoue 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.code__ronds--faux .code__rond {
+  border-color: var(--sia-alerte);
+}
+
+.code__ronds--faux .code__rond--plein {
+  background: var(--sia-alerte);
+}
+
+/* Réserve la place du message : le clavier ne saute pas quand il apparaît. */
+.code__message {
+  min-height: 40px;
+  max-width: 300px;
+  margin: 12px 0 8px;
+  color: var(--sia-alerte);
+  font-size: var(--sia-aide);
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.code__clavier {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 12px 20px;
+}
+
+.code__touche {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code__touche:active:not(:disabled) {
+  background: var(--sia-ligne);
+  transform: scale(0.96);
+}
+
+.code__touche:disabled {
+  color: var(--sia-eteint);
+  cursor: not-allowed;
+}
+
+.code__touche:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.code__touche--effacer {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sia-texte-doux);
+}
+
+.code__sortie {
+  margin-top: 16px;
+}
+
+.code__lien {
+  min-height: var(--sia-toucher);
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  cursor: pointer;
+}
+
+.code__lien:active {
+  background: var(--sia-carte);
+}
+
+.code__lien:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: -2px;
+}
+
+@keyframes code-secoue {
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code__rond,
+  .code__touche {
+    transition: none;
+  }
+
+  .code__ronds--faux {
+    animation: none;
+  }
+}

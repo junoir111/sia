@@ -296,6 +296,7 @@ const CLES_APPAREIL = [
   'sia.appareils',
   'sia.pushkey',
   'sia.alertes',
+  'sia.verrou',
 ];
 /** Temps laissé aux effacements en attente avant d'annuler le jeton. */
 const DELAI_EFFACEMENTS_MS = 10_000;

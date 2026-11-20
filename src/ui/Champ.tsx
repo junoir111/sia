@@ -13,6 +13,8 @@ type Proprietes = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'valu
   erreur?: string;
   /** Mot de passe : texte caché, avec un œil pour l'afficher. */
   secret?: boolean;
+  /** Ce que l'œil dit cacher ou montrer (« le mot de passe » par défaut, « le code » pour le code secret). */
+  nomSecret?: string;
 };
 
 /** Champ de saisie : libellé au-dessus, aide ou erreur en dessous. */
@@ -23,6 +25,7 @@ export function Champ({
   aide,
   erreur,
   secret = false,
+  nomSecret = 'le mot de passe',
   id,
   ...reste
 }: Proprietes) {
@@ -52,7 +55,7 @@ export function Champ({
           <button
             type="button"
             className="champ__oeil"
-            aria-label={visible ? 'Cacher le mot de passe' : 'Afficher le mot de passe'}
+            aria-label={visible ? `Cacher ${nomSecret}` : `Afficher ${nomSecret}`}
             aria-controls={idChamp}
             onClick={() => setVisible((v) => !v)}
           >
