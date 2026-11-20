@@ -19,6 +19,7 @@
     "apercu-web": "vite preview --outDir dist-web --base /sia/ --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
+    "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.6.2",
     "matrix-js-sdk": "45.1.0",
     "react": "18.3.1",
