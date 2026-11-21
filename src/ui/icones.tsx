@@ -36,6 +36,15 @@ export function IconeOeilBarre({ taille = 24, className }: ProprietesIcone) {
   );
 }
 
+export function IconeCloche({ taille = 24, className }: ProprietesIcone) {
+  return (
+    <svg {...cadre(taille, className)} strokeWidth={1.8}>
+      <path d="M6 9a6 6 0 0 1 12 0c0 5 1.5 6.5 2 7H4c.5-.5 2-2 2-7Z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
 export function IconeAlerte({ taille = 16, className }: ProprietesIcone) {
   return (
     <svg {...cadre(taille, className)} strokeWidth={2}>

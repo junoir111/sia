@@ -16,7 +16,8 @@ import { Mur } from '../src/ecrans/mur/Mur';
 import { ilYa, lireSucces } from '../src/ecrans/mur/navigation-mur';
 import { oublierMoi } from '../src/ecrans/mur/useMoi';
 import { oublierMemoireMur } from '../src/ecrans/mur/useMur';
-import { demanderA, direOui } from '../src/matrix/bulles';
+import { demanderA, direOui, listerBulles } from '../src/matrix/bulles';
+import type { ResumeBulle } from '../src/matrix/bulles';
 import { ecouterMur } from '../src/matrix/mur';
 import { lireProfil, lireProfilClient } from '../src/matrix/profil';
 import { lireSession } from '../src/matrix/session';
@@ -195,29 +196,34 @@ describe('Écrans du Mur', () => {
       expect(plombier).toHaveAttribute('href', '/mur/metier/Plombier?quartier=Owendo');
     });
 
-    it('un métier tapé ne garde que les cases qui le contiennent', () => {
+    it('un métier choisi montre les personnes de ce métier (pas une case)', () => {
       afficher(CHEMINS.mur);
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'plomb' } });
-      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+      expect(screen.getByRole('heading', { name: 'Prestataires' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /mangue-douce/ })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /baobab-12/ })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Plombier/ })).not.toBeInTheDocument();
       expect(lieu()).toBe('/mur?q=plomb');
     });
 
-    it('un métier tapé après un quartier garde le quartier dans l’adresse et les liens', () => {
+    it('un métier après un quartier : les personnes de ce quartier, lien de fiche avec le quartier', () => {
       afficher(CHEMINS.mur);
       const champ = screen.getByRole('searchbox');
       fireEvent.change(champ, { target: { value: 'Akanda' } });
       fireEvent.change(champ, { target: { value: 'plomb' } });
       expect(lieu()).toBe('/mur?quartier=Akanda&q=plomb');
-      expect(screen.getByRole('link', { name: /Plombier/ })).toHaveAttribute(
+      // mangue-douce est à Akanda, baobab-12 à Owendo : seul le premier reste.
+      expect(screen.getByRole('link', { name: /mangue-douce/ })).toHaveAttribute(
         'href',
-        '/mur/metier/Plombier?quartier=Akanda',
+        '/mur/prestataire/%24p1?quartier=Akanda',
       );
+      expect(screen.queryByRole('link', { name: /baobab-12/ })).not.toBeInTheDocument();
     });
 
     it('reprend le métier tapé de l’adresse', () => {
       afficher('/mur?quartier=Akanda&q=plomb');
       expect(screen.getByRole('searchbox')).toHaveValue('plomb');
-      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+      expect(screen.getByRole('link', { name: /mangue-douce/ })).toBeInTheDocument();
     });
 
     it('retour par la flèche : texte tapé et position de défilement retrouvés', () => {
@@ -226,12 +232,44 @@ describe('Écrans du Mur', () => {
       Object.defineProperty(window, 'scrollY', { value: 340, configurable: true });
       afficher(CHEMINS.mur);
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'plomb' } });
-      fireEvent.click(screen.getByRole('link', { name: /Plombier/ }));
+      fireEvent.click(screen.getByRole('link', { name: /mangue-douce/ }));
       fireEvent.click(screen.getByRole('link', { name: 'Retour' }));
       expect(screen.getByRole('searchbox')).toHaveValue('plomb');
       expect(defiler).toHaveBeenLastCalledWith(0, 340);
       vi.unstubAllGlobals();
       Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    });
+
+    it('les puces de métier filtrent : « Plombier » montre les personnes, « Tout » rend la grille', () => {
+      afficher(CHEMINS.mur);
+      const puces = screen.getByRole('group', { name: 'Filtrer par métier' });
+      fireEvent.click(within(puces).getByRole('button', { name: 'Plombier' }));
+      expect(screen.getByRole('link', { name: /mangue-douce/ })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Plombier/ })).not.toBeInTheDocument();
+      fireEvent.click(within(puces).getByRole('button', { name: 'Tout' }));
+      expect(screen.getByRole('link', { name: /Plombier/ })).toBeInTheDocument();
+    });
+
+    it('la cloche mène aux bulles ; une pastille quand il y a du nouveau', () => {
+      afficher(CHEMINS.mur);
+      expect(screen.getByRole('link', { name: 'Mes bulles' })).toHaveAttribute(
+        'href',
+        CHEMINS.bulles,
+      );
+    });
+
+    it('cloche : le libellé dit le nombre de nouveautés', () => {
+      const bulle: ResumeBulle = {
+        roomId: '!b:sia',
+        autre: { pseudo: 'x', zone: 'y' },
+        demande: null,
+        etat: 'ouverte',
+        nonLus: 3,
+        autreEcrit: false,
+      };
+      vi.mocked(listerBulles).mockReturnValue([bulle]);
+      afficher(CHEMINS.mur);
+      expect(screen.getByRole('link', { name: /Mes bulles, 3 nouveau/ })).toBeInTheDocument();
     });
 
     it('stockage refusé : le Mur s’affiche quand même', () => {

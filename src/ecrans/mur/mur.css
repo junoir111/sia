@@ -91,8 +91,81 @@
   margin-top: 16px;
 }
 
-/* Section « Clients » : les demandes posées sur le Mur, en liste sous la grille des prestataires. */
-.mur__clients {
+/* Groupe à droite de l'en-tête : indicateur, cloche, Mon compte. */
+.mur__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Cloche → mes bulles, avec une pastille verte quand il y a du nouveau. */
+.mur__cloche {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  color: var(--sia-texte);
+  border-radius: var(--sia-rayon-rond);
+}
+
+.mur__cloche:active {
+  color: var(--sia-accent);
+}
+
+.mur__cloche:focus-visible {
+  outline: 2px solid var(--sia-accent);
+  outline-offset: 2px;
+}
+
+.mur__pastille {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 9px;
+  height: 9px;
+  background: var(--sia-accent);
+  border: 2px solid var(--sia-fond);
+  border-radius: var(--sia-rayon-rond);
+}
+
+/* Puces de filtre par métier : rangée qui défile, « Tout » + un métier par case du Mur. */
+.mur__puces {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mur__puces::-webkit-scrollbar {
+  display: none;
+}
+
+.mur__puce {
+  flex: none;
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--sia-texte-doux);
+  font-size: var(--sia-libelle);
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-rond);
+  cursor: pointer;
+}
+
+.mur__puce--active {
+  color: var(--sia-sur-accent);
+  background: var(--sia-accent);
+  border-color: var(--sia-accent);
+}
+
+/* Un bloc de section (Prestataires, Clients) : un titre puis la liste. */
+.mur__bloc {
   margin-top: 24px;
 }
 
@@ -103,6 +176,8 @@
   line-height: 28px;
 }
 
+/* Liste de personnes (un métier choisi) : cartes en colonne, comme la liste d'un métier. */
+.mur__cartes,
 .mur__demandes {
   display: flex;
   flex-direction: column;

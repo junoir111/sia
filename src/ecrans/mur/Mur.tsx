@@ -1,16 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { CHEMINS, cheminFicheDemande, cheminListeMetier } from '../../chemins';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  CHEMINS,
+  cheminFicheDemande,
+  cheminFichePrestataire,
+  cheminListeMetier,
+} from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
-import { grilleMur } from '../../logique/mur';
+import { cleTexte, grilleMur, libelleModalite, listeMetier } from '../../logique/mur';
 import { formaterPrix, pseudoPropose } from '../../logique/profil';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonRond } from '../../ui/BoutonRond';
 import { CarteAnnonce } from '../../ui/CarteAnnonce';
+import { CartePrestataire } from '../../ui/CartePrestataire';
 import { IndicateurMiseAJour } from '../../ui/IndicateurMiseAJour';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { TuileMetier } from '../../ui/TuileMetier';
-import { IconeLoupe } from '../../ui/icones';
+import { IconeCloche, IconeLoupe } from '../../ui/icones';
 import { useGlisse } from '../../ui/useGlisse';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { MonCompte } from './MonCompte';
@@ -24,7 +30,7 @@ import './mur.css';
 const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
 const LONGUEUR_MAX_RECHERCHE = 40;
 
-/** E7 Le Mur (modèle 1 « grille des métiers »). */
+/** E7 Le Mur : filtres par métier, prestataires disponibles, et demandes des clients (pour les prestataires). */
 export function Mur() {
   const [requete, setRequete] = useSearchParams();
   const { client, etat } = useMatrix();
@@ -55,9 +61,22 @@ export function Mur() {
     maintenant: vue.maintenant,
   });
   // Mis à jour pendant l'affichage (permis par React) : vide si on efface tout, sinon le dernier quartier tapé.
-  const nouveauDernier = texte.trim() === '' ? undefined : (quartier ?? dernierQuartier);
+  // Tant que le Mur n'est pas prêt, on ne touche à rien : un métier tapé paraîtrait un instant être un quartier
+  // (aucune case connue) et écraserait le vrai quartier.
+  const nouveauDernier = !vue.pret
+    ? dernierQuartier
+    : texte.trim() === ''
+      ? undefined
+      : (quartier ?? dernierQuartier);
   if (nouveauDernier !== dernierQuartier) setDernierQuartier(nouveauDernier);
   const quartierLien = nouveauDernier;
+
+  // Puces de filtre : « Tout » + un métier par case présente sur le Mur. Toucher une puce filtre comme si on
+  // le tapait. La puce active suit le texte (exactement ce métier), sinon « Tout ».
+  const metiers = vue.pret
+    ? grilleMur(vue.statuts, { maintenant: vue.maintenant }).map((t) => t.metier)
+    : [];
+  const cleCourante = cleTexte(texte);
 
   // Les demandes des clients, montrées sur le Mur (section « Clients ») SEULEMENT aux prestataires : ce sont
   // eux le public, et un client n'écrit pas à un autre client. Un prestataire pas disponible les retrouve en
@@ -99,6 +118,7 @@ export function Mur() {
 
   const pseudo = moi?.pseudo ?? (userId ? pseudoPropose(userId) : '');
   const reseauKo = etat === 'erreur-reseau' || vue.erreur;
+  const nonLus = compterNouveautes(bulles);
 
   let bouton = null;
   if (moi?.role === 'prestataire') {
@@ -115,41 +135,78 @@ export function Mur() {
     bouton = <BoutonRond to={CHEMINS.role} libelle="Commencer" />;
   }
 
-  let contenu;
-  if (reseauKo) contenu = <Bandeau message={PAS_DE_RESEAU} />;
-  else if (!vue.pret) contenu = <p className="mur__attente">Chargement…</p>;
+  // Un seul métier retenu par le filtre : on montre les PERSONNES (cartes) ; sinon la grille des métiers.
+  const metierUnique = parMetier && tuiles.length === 1 ? (tuiles[0]?.metier ?? null) : null;
+  const gens = metierUnique
+    ? listeMetier(vue.statuts, metierUnique, quartierLien, vue.maintenant)
+    : [];
+
+  let prestataires;
+  if (reseauKo) prestataires = <Bandeau message={PAS_DE_RESEAU} />;
+  else if (!vue.pret) prestataires = <p className="mur__attente">Chargement…</p>;
   else if (tuiles.length === 0) {
     const filtre = texte.trim() !== '';
-    contenu = (
+    prestataires = (
       <p className="mur__attente" aria-live="polite">
         {filtre ? 'Personne de disponible ici.' : 'Aucun prestataire disponible pour l’instant.'}
       </p>
     );
-  } else
-    contenu = (
-      <ul className="mur__grille" ref={grille}>
-        {tuiles.map((t) => (
-          <li key={t.metier} data-glisse={t.metier} onClickCapture={memoriser}>
-            <TuileMetier tuile={t} to={cheminListeMetier(t.metier, quartierLien)} />
-          </li>
-        ))}
-      </ul>
+  } else if (metierUnique) {
+    prestataires = (
+      <section className="mur__bloc" aria-label="Prestataires disponibles">
+        <h2 className="mur__section">Prestataires</h2>
+        <ul className="mur__cartes" ref={grille}>
+          {gens.map((p) => (
+            <li key={p.eventId} data-glisse={p.eventId} onClickCapture={memoriser}>
+              <CartePrestataire
+                pseudo={p.pseudo}
+                info={p.modalite ? `${p.zone} · ${libelleModalite(p.modalite)}` : p.zone}
+                to={cheminFichePrestataire(p.eventId, '', quartierLien)}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
     );
+  } else {
+    prestataires = (
+      <section className="mur__bloc" aria-label="Prestataires disponibles">
+        <h2 className="mur__section">Prestataires</h2>
+        <ul className="mur__grille" ref={grille}>
+          {tuiles.map((t) => (
+            <li key={t.metier} data-glisse={t.metier} onClickCapture={memoriser}>
+              <TuileMetier tuile={t} to={cheminListeMetier(t.metier, quartierLien)} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
 
   return (
     <main className="ecran mur">
       <header className="mur__entete">
         <h1 className="mur__titre">Le Mur</h1>
-        <IndicateurMiseAJour actif={rattrape} />
-        <button
-          type="button"
-          className="mur__compte"
-          aria-label="Mon compte"
-          aria-haspopup="dialog"
-          onClick={() => setCompteOuvert(true)}
-        >
-          <RondInitiale nom={pseudo} taille="moyen" />
-        </button>
+        <div className="mur__actions">
+          <IndicateurMiseAJour actif={rattrape} />
+          <Link
+            className="mur__cloche"
+            to={CHEMINS.bulles}
+            aria-label={nonLus > 0 ? `Mes bulles, ${nonLus} nouveau(x)` : 'Mes bulles'}
+          >
+            <IconeCloche />
+            {nonLus > 0 && <span className="mur__pastille" aria-hidden="true" />}
+          </Link>
+          <button
+            type="button"
+            className="mur__compte"
+            aria-label="Mon compte"
+            aria-haspopup="dialog"
+            onClick={() => setCompteOuvert(true)}
+          >
+            <RondInitiale nom={pseudo} taille="moyen" />
+          </button>
+        </div>
       </header>
       <div className="mur__recherche">
         <IconeLoupe className="mur__loupe" />
@@ -165,9 +222,35 @@ export function Mur() {
           onChange={(e) => setTexte(e.target.value)}
         />
       </div>
-      {contenu}
+      {metiers.length > 0 && (
+        <div className="mur__puces" role="group" aria-label="Filtrer par métier">
+          <button
+            type="button"
+            className={!parMetier ? 'mur__puce mur__puce--active' : 'mur__puce'}
+            aria-pressed={!parMetier}
+            onClick={() => setTexte('')}
+          >
+            Tout
+          </button>
+          {metiers.map((m) => {
+            const actif = cleCourante === cleTexte(m);
+            return (
+              <button
+                key={m}
+                type="button"
+                className={actif ? 'mur__puce mur__puce--active' : 'mur__puce'}
+                aria-pressed={actif}
+                onClick={() => setTexte(m)}
+              >
+                {m}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {prestataires}
       {demandesVisibles.length > 0 && (
-        <section className="mur__clients" aria-label="Demandes des clients">
+        <section className="mur__bloc mur__clients" aria-label="Demandes des clients">
           <h2 className="mur__section">Clients</h2>
           <ul className="mur__demandes">
             {demandesVisibles.map((d) => (
@@ -190,7 +273,7 @@ export function Mur() {
         <MonCompte
           pseudo={pseudo}
           moi={moi}
-          nouveautes={compterNouveautes(bulles)}
+          nouveautes={nonLus}
           onFermer={() => setCompteOuvert(false)}
         />
       )}
