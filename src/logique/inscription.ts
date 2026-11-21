@@ -2,23 +2,23 @@
 
 import { codeValide } from './code-secret';
 
-export type ChampInscription =
-  'identifiant' | 'motDePasse' | 'confirmation' | 'codeSecret' | 'code' | 'majeur';
+export type ChampInscription = 'identifiant' | 'codeSecret' | 'confirmation' | 'code' | 'majeur';
 
 export type ValeursInscription = {
   identifiant: string;
-  motDePasse: string;
-  confirmation: string;
-  /** Code secret à 4 chiffres : il verrouille l'appli (F12), il reste sur le téléphone. */
+  /**
+   * Code secret à 4 chiffres. C'est à la fois le mot de passe du compte (pour se connecter) et le
+   * verrou de l'appli (F12). Un seul secret à retenir ; le serveur freine les essais en rafale (429).
+   */
   codeSecret: string;
+  /** Le code retapé : évite une faute de frappe qui enfermerait dehors (le code ouvre tout le compte). */
+  confirmation: string;
   /** Code d'invitation donné par la personne qui invite. */
   code: string;
   majeur: boolean;
 };
 
 export type ErreursInscription = Partial<Record<ChampInscription, string>>;
-
-export const MOT_DE_PASSE_MIN = 10;
 
 // Règle Matrix simplifiée : 3 à 30 signes, lettres a-z, chiffres, . _ -
 const FORME_IDENTIFIANT = /^[a-z0-9._-]{3,30}$/;
@@ -32,14 +32,10 @@ export function verifierInscription(v: ValeursInscription): ErreursInscription {
   if (!FORME_IDENTIFIANT.test(normaliserIdentifiant(v.identifiant))) {
     erreurs.identifiant = '3 à 30 signes : lettres, chiffres, . _ -';
   }
-  if (v.motDePasse.length < MOT_DE_PASSE_MIN) {
-    erreurs.motDePasse = `Au moins ${MOT_DE_PASSE_MIN} signes.`;
-  }
-  if (v.confirmation !== v.motDePasse) {
-    erreurs.confirmation = 'Les deux mots de passe ne sont pas pareils.';
-  }
   if (!codeValide(v.codeSecret)) {
     erreurs.codeSecret = 'Ton code secret a 4 chiffres.';
+  } else if (v.confirmation !== v.codeSecret) {
+    erreurs.confirmation = 'Les deux codes ne sont pas pareils.';
   }
   if (v.code.trim() === '') {
     erreurs.code = "Écris ton code d'invitation.";
@@ -67,9 +63,8 @@ export function lireCodeInvitation(brut: string): { jeton: string; role: RoleCod
 export function formulaireComplet(v: ValeursInscription): boolean {
   return (
     v.identifiant.trim() !== '' &&
-    v.motDePasse !== '' &&
-    v.confirmation !== '' &&
     v.codeSecret !== '' &&
+    v.confirmation !== '' &&
     v.code.trim() !== '' &&
     v.majeur
   );

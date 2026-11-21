@@ -40,8 +40,11 @@ const ATTENTE_DEFAUT_MS = 2_000;
 const ATTENTE_MIN_MS = 500;
 const ATTENTE_MAX_MS = 5_000;
 
-/** Mot de passe : 10 signes minimum (document 5, table COMPTE). */
-export const MOT_DE_PASSE_MIN = 10;
+/**
+ * Mot de passe du compte : 4 signes minimum. Depuis 2026-11-21, c'est le code secret à 4 chiffres (F1) :
+ * un seul secret à retenir, et le serveur freine les essais en rafale (429 dès le 4e essai raté).
+ */
+export const MOT_DE_PASSE_MIN = 4;
 /** Identifiant Matrix complet : 255 signes au plus (spec Matrix). */
 const LONGUEUR_MAX_ID_MATRIX = 255;
 const LONGUEUR_MAX_IDENTIFIANT = LONGUEUR_MAX_ID_MATRIX - `@:${NOM_SERVEUR}`.length;

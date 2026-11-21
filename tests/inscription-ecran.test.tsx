@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { definirCode } from '../src/appareil/verrou';
 import { CHEMINS } from '../src/chemins';
@@ -29,13 +29,10 @@ function afficher() {
 
 function remplir(code: string) {
   fireEvent.change(screen.getByLabelText('Identifiant'), { target: { value: 'Mangue-Douce' } });
-  fireEvent.change(screen.getByLabelText('Mot de passe'), { target: { value: 'palmier2026x' } });
-  fireEvent.change(screen.getByLabelText('Confirme le mot de passe'), {
-    target: { value: 'palmier2026x' },
-  });
   fireEvent.change(screen.getByLabelText('Code secret (4 chiffres)'), {
     target: { value: '4821' },
   });
+  fireEvent.change(screen.getByLabelText('Confirme le code'), { target: { value: '4821' } });
   fireEvent.change(screen.getByLabelText("Code d'invitation"), { target: { value: code } });
   fireEvent.click(screen.getByLabelText("J'ai 18 ans ou plus"));
 }
@@ -58,9 +55,9 @@ describe('Écran Créer mon compte (E3)', () => {
   it('affiche les erreurs locales sans appeler le serveur', () => {
     afficher();
     remplir('P-AAAA-BBBB-CCCC');
-    fireEvent.change(screen.getByLabelText('Mot de passe'), { target: { value: 'court' } });
+    fireEvent.change(screen.getByLabelText('Confirme le code'), { target: { value: '9999' } });
     fireEvent.click(bouton());
-    expect(screen.getByText('Au moins 10 signes.')).toBeInTheDocument();
+    expect(screen.getByText('Les deux codes ne sont pas pareils.')).toBeInTheDocument();
     expect(creerCompteSimule).not.toHaveBeenCalled();
   });
 
@@ -97,11 +94,7 @@ describe('Écran Créer mon compte (E3)', () => {
     fireEvent.click(bouton());
 
     expect(await screen.findByText('profil prestataire')).toBeInTheDocument();
-    expect(creerCompteSimule).toHaveBeenCalledWith(
-      'mangue-douce',
-      'palmier2026x',
-      'P-AAAA-BBBB-CCCC',
-    );
+    expect(creerCompteSimule).toHaveBeenCalledWith('mangue-douce', '4821', 'P-AAAA-BBBB-CCCC');
     expect(enregistrerSession).toHaveBeenCalledWith(SESSION);
     // Le code choisi dans le formulaire devient le code de verrouillage du téléphone.
     expect(definirCode).toHaveBeenCalledWith('4821');
@@ -134,9 +127,11 @@ describe('Écran Créer mon compte (E3)', () => {
     expect(champ).toHaveValue('4821');
     expect(champ).toHaveAttribute('type', 'password');
     expect(champ).toHaveAttribute('inputmode', 'numeric');
-    fireEvent.click(screen.getByRole('button', { name: 'Afficher le code' }));
+    // Deux champs de code (le secret et sa confirmation) : on cible l'œil DANS le cadre du code secret.
+    const cadre = champ.closest('.champ') as HTMLElement;
+    fireEvent.click(within(cadre).getByRole('button', { name: 'Afficher le code' }));
     expect(champ).toHaveAttribute('type', 'text');
-    expect(screen.getByRole('button', { name: 'Cacher le code' })).toBeInTheDocument();
+    expect(within(cadre).getByRole('button', { name: 'Cacher le code' })).toBeInTheDocument();
   });
 
   it('un code secret trop court : message sous le champ, rien n’est envoyé', () => {

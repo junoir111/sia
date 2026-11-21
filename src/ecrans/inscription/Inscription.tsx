@@ -27,9 +27,8 @@ import './inscription.css';
 
 const VIDE: ValeursInscription = {
   identifiant: '',
-  motDePasse: '',
-  confirmation: '',
   codeSecret: '',
+  confirmation: '',
   code: '',
   majeur: false,
 };
@@ -51,8 +50,8 @@ const REPONSES_SERVEUR: Record<ErreurInscription, Reponse> = {
     message: 'Le serveur refuse ce nom. Essaie-en un autre.',
   },
   'mot-de-passe-faible': {
-    champ: 'motDePasse',
-    message: 'Mot de passe trop simple. Mélange lettres et chiffres.',
+    champ: 'codeSecret',
+    message: 'Le serveur refuse ce code. Essaies-en un autre.',
   },
   reseau: { bandeau: true, message: 'Pas de connexion. Réessaie dans un instant.' },
   'trop-de-demandes': {
@@ -94,7 +93,7 @@ export function Inscription() {
     setEnvoiEnCours(true);
     const resultat = await creerCompte(
       normaliserIdentifiant(valeurs.identifiant),
-      valeurs.motDePasse,
+      valeurs.codeSecret,
       jeton,
     ).catch((): ResultatInscription => ({ ok: false, erreur: 'inconnue' }));
 
@@ -107,8 +106,8 @@ export function Inscription() {
         setBandeau('Ton compte est créé, mais le téléphone refuse de le garder. Connecte-toi.');
         return;
       }
-      // Le code choisi ici verrouille l'appli. Le bouton reste occupé pendant son calcul (pas de deuxième envoi).
-      // Si le téléphone refuse de le garder, l'écran « Choisis ton code » le redemandera.
+      // Le code choisi ici est à la fois le mot de passe du compte et le verrou de l'appli : on le pose tout
+      // de suite (plus aucun deuxième écran de code après). Le bouton reste occupé pendant son calcul.
       await definirCode(valeurs.codeSecret).catch(() => undefined);
       navigate(cheminApresInscription(role));
       return;
@@ -150,33 +149,27 @@ export function Inscription() {
             spellCheck={false}
           />
           <Champ
-            libelle="Mot de passe"
-            valeur={valeurs.motDePasse}
-            onChange={(v) => modifier('motDePasse', v)}
-            aide="10 signes minimum."
-            erreur={erreurs.motDePasse}
-            secret
-            autoComplete="new-password"
-          />
-          <Champ
-            libelle="Confirme le mot de passe"
-            valeur={valeurs.confirmation}
-            onChange={(v) => modifier('confirmation', v)}
-            erreur={erreurs.confirmation}
-            secret
-            autoComplete="new-password"
-          />
-          <Champ
             libelle="Code secret (4 chiffres)"
             valeur={valeurs.codeSecret}
             onChange={(v) => modifier('codeSecret', nettoyerSaisieCode(v))}
-            aide="Il verrouille SIA à chaque ouverture. Retiens-le bien."
+            aide="Ton mot de passe ET le verrou de SIA. Retiens-le bien."
             erreur={erreurs.codeSecret}
             secret
             nomSecret="le code"
             inputMode="numeric"
             maxLength={4}
-            autoComplete="off"
+            autoComplete="new-password"
+          />
+          <Champ
+            libelle="Confirme le code"
+            valeur={valeurs.confirmation}
+            onChange={(v) => modifier('confirmation', nettoyerSaisieCode(v))}
+            erreur={erreurs.confirmation}
+            secret
+            nomSecret="le code"
+            inputMode="numeric"
+            maxLength={4}
+            autoComplete="new-password"
           />
           <Champ
             libelle="Code d'invitation"

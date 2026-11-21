@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MOT_DE_PASSE_MIN,
   formulaireComplet,
   lireCodeInvitation,
   normaliserIdentifiant,
@@ -10,9 +9,8 @@ import {
 
 const valides: ValeursInscription = {
   identifiant: 'abel',
-  motDePasse: 'motdepasse',
-  confirmation: 'motdepasse',
   codeSecret: '4821',
+  confirmation: '4821',
   code: 'invitation',
   majeur: true,
 };
@@ -71,42 +69,30 @@ describe('verifierInscription', () => {
     });
   });
 
-  describe('mot de passe', () => {
-    it('vaut 10 signes minimum', () => {
-      expect(MOT_DE_PASSE_MIN).toBe(10);
-    });
-
-    it('refuse 9 signes', () => {
-      const mdp = 'a'.repeat(9);
-      const erreurs = verifierInscription(avec({ motDePasse: mdp, confirmation: mdp }));
-      expect(erreurs.motDePasse).toBeTruthy();
-      expect(erreurs.confirmation).toBeUndefined();
-    });
-
-    it('accepte 10 signes', () => {
-      const mdp = 'a'.repeat(10);
-      expect(verifierInscription(avec({ motDePasse: mdp, confirmation: mdp }))).toEqual({});
-    });
-  });
-
-  describe('confirmation', () => {
-    it('refuse deux mots de passe différents', () => {
-      expect(verifierInscription(avec({ confirmation: 'motdepassE' })).confirmation).toBe(
-        'Les deux mots de passe ne sont pas pareils.',
-      );
-    });
-  });
-
-  describe('code secret (4 chiffres, il verrouille l’appli)', () => {
+  describe('code secret (4 chiffres : mot de passe du compte ET verrou de l’appli)', () => {
     it('accepte 4 chiffres, zéros compris', () => {
-      expect(verifierInscription(avec({ codeSecret: '0000' })).codeSecret).toBeUndefined();
-      expect(verifierInscription(avec({ codeSecret: '9081' })).codeSecret).toBeUndefined();
+      expect(verifierInscription(avec({ codeSecret: '0000', confirmation: '0000' })).codeSecret).toBeUndefined();
+      expect(verifierInscription(avec({ codeSecret: '9081', confirmation: '9081' })).codeSecret).toBeUndefined();
     });
 
     it.each(['', '123', '12345', '12a4', '12 4', 'abcd'])('refuse « %s »', (codeSecret) => {
-      expect(verifierInscription(avec({ codeSecret })).codeSecret).toBe(
+      expect(verifierInscription(avec({ codeSecret, confirmation: codeSecret })).codeSecret).toBe(
         'Ton code secret a 4 chiffres.',
       );
+    });
+  });
+
+  describe('confirmation du code', () => {
+    it('refuse deux codes différents', () => {
+      expect(verifierInscription(avec({ confirmation: '4822' })).confirmation).toBe(
+        'Les deux codes ne sont pas pareils.',
+      );
+    });
+
+    it('ne parle pas de confirmation tant que le code n’est pas déjà 4 chiffres', () => {
+      const erreurs = verifierInscription(avec({ codeSecret: '12', confirmation: '99' }));
+      expect(erreurs.codeSecret).toBeTruthy();
+      expect(erreurs.confirmation).toBeUndefined();
     });
   });
 
@@ -128,14 +114,14 @@ describe('verifierInscription', () => {
   it('renvoie toutes les erreurs à la fois', () => {
     const erreurs = verifierInscription({
       identifiant: '',
-      motDePasse: '',
-      confirmation: 'x',
       codeSecret: '',
+      confirmation: 'x',
       code: '',
       majeur: false,
     });
+    // Code secret vide = erreur sur codeSecret ; la confirmation n'est jugée qu'une fois le code valide.
     expect(Object.keys(erreurs).sort()).toEqual(
-      ['code', 'codeSecret', 'confirmation', 'identifiant', 'majeur', 'motDePasse'].sort(),
+      ['code', 'codeSecret', 'identifiant', 'majeur'].sort(),
     );
   });
 });
@@ -147,17 +133,16 @@ describe('formulaireComplet', () => {
 
   it.each<[string, Partial<ValeursInscription>]>([
     ['identifiant vide', { identifiant: '  ' }],
-    ['mot de passe vide', { motDePasse: '' }],
-    ['confirmation vide', { confirmation: '' }],
     ['code secret vide', { codeSecret: '' }],
+    ['confirmation vide', { confirmation: '' }],
     ['code vide', { code: '  ' }],
     ['case non cochée', { majeur: false }],
   ])('est faux avec %s', (_nom, changement) => {
     expect(formulaireComplet(avec(changement))).toBe(false);
   });
 
-  it('ne juge pas la validité (un mot de passe court reste « rempli »)', () => {
-    expect(formulaireComplet(avec({ motDePasse: 'a', confirmation: 'b' }))).toBe(true);
+  it('ne juge pas la validité (un code et une confirmation différents restent « remplis »)', () => {
+    expect(formulaireComplet(avec({ codeSecret: '12', confirmation: '34' }))).toBe(true);
   });
 });
 

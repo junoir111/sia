@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CHEMINS } from '../../chemins';
 import { cheminApresConnexion } from '../../coquille/apres-connexion';
+import { definirCode } from '../../appareil/verrou';
+import { nettoyerSaisieCode } from '../../logique/code-secret';
 import { normaliserIdentifiant } from '../../logique/inscription';
 import { connecter } from '../../matrix/auth';
 import type { ResultatConnexion, Session } from '../../matrix/auth';
@@ -14,29 +16,29 @@ import { IconeRetour } from '../../ui/icones';
 import './connexion.css';
 
 const MESSAGES = {
-  identifiants: 'Identifiant ou mot de passe incorrect.',
+  identifiants: 'Identifiant ou code incorrect.',
   reseau: 'Pas de connexion. Réessaie dans un instant.',
   'trop-de-demandes': 'Trop d’essais en même temps. Attends quelques secondes et réessaie.',
   inconnue: 'Un problème est survenu. Réessaie.',
   stockage: 'Le téléphone refuse de garder ta connexion. Réessaie.',
 } as const;
 
-/** E2 Se connecter (même style que E3). */
+/** E2 Se connecter (même style que E3). Le code à 4 chiffres est le mot de passe du compte. */
 export function Connexion() {
   const navigate = useNavigate();
   const [identifiant, setIdentifiant] = useState('');
-  const [motDePasse, setMotDePasse] = useState('');
+  const [code, setCode] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
   const [bandeau, setBandeau] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
   // Connexion réussie mais suite impossible (réseau) : on ne recrée pas un appareil au nouvel essai.
   const [connecte, setConnecte] = useState<Session | null>(null);
 
-  const complet = identifiant.trim() !== '' && motDePasse !== '';
+  const complet = identifiant.trim() !== '' && code.length === 4;
 
-  function modifier(champ: 'identifiant' | 'motDePasse', valeur: string) {
+  function modifier(champ: 'identifiant' | 'code', valeur: string) {
     if (champ === 'identifiant') setIdentifiant(valeur);
-    else setMotDePasse(valeur);
+    else setCode(nettoyerSaisieCode(valeur));
     setErreur(null);
   }
 
@@ -55,7 +57,7 @@ export function Connexion() {
   }
 
   async function seConnecter(): Promise<Session | null> {
-    const resultat = await connecter(normaliserIdentifiant(identifiant), motDePasse).catch(
+    const resultat = await connecter(normaliserIdentifiant(identifiant), code).catch(
       (): ResultatConnexion => ({ ok: false, erreur: 'inconnue' }),
     );
     if (!resultat.ok) {
@@ -69,6 +71,8 @@ export function Connexion() {
       setBandeau(MESSAGES.stockage);
       return null;
     }
+    // Le code qui vient d'ouvrir le compte devient aussi le verrou de l'appli : plus de deuxième écran de code.
+    await definirCode(code).catch(() => undefined);
     setConnecte(resultat.session);
     return resultat.session;
   }
@@ -109,11 +113,15 @@ export function Connexion() {
             spellCheck={false}
           />
           <Champ
-            libelle="Mot de passe"
-            valeur={motDePasse}
-            onChange={(v) => modifier('motDePasse', v)}
+            libelle="Code (4 chiffres)"
+            valeur={code}
+            onChange={(v) => modifier('code', v)}
+            aide="Le code choisi à l'inscription."
             erreur={erreur ?? undefined}
             secret
+            nomSecret="le code"
+            inputMode="numeric"
+            maxLength={4}
             autoComplete="current-password"
           />
         </div>
