@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CHEMINS, cheminListeMetier } from '../../chemins';
+import { CHEMINS, cheminFicheDemande, cheminListeMetier } from '../../chemins';
 import { useMatrix } from '../../coquille/FournisseurMatrix';
 import { grilleMur } from '../../logique/mur';
-import { pseudoPropose } from '../../logique/profil';
+import { formaterPrix, pseudoPropose } from '../../logique/profil';
 import { Bandeau } from '../../ui/Bandeau';
 import { BoutonRond } from '../../ui/BoutonRond';
+import { CarteAnnonce } from '../../ui/CarteAnnonce';
 import { IndicateurMiseAJour } from '../../ui/IndicateurMiseAJour';
 import { RondInitiale } from '../../ui/RondInitiale';
 import { TuileMetier } from '../../ui/TuileMetier';
@@ -13,6 +14,7 @@ import { IconeLoupe } from '../../ui/icones';
 import { useGlisse } from '../../ui/useGlisse';
 import { compterNouveautes, useBulles } from '../bulles/useBulles';
 import { MonCompte } from './MonCompte';
+import { ilYa } from './navigation-mur';
 import { useMoi } from './useMoi';
 import { useMur } from './useMur';
 import { useRattrapage } from './useRattrapage';
@@ -56,6 +58,20 @@ export function Mur() {
   const nouveauDernier = texte.trim() === '' ? undefined : (quartier ?? dernierQuartier);
   if (nouveauDernier !== dernierQuartier) setDernierQuartier(nouveauDernier);
   const quartierLien = nouveauDernier;
+
+  // Les demandes des clients, montrées sur le Mur (section « Clients ») SEULEMENT aux prestataires : ce sont
+  // eux le public, et un client n'écrit pas à un autre client. Un prestataire pas disponible les retrouve en
+  // revenant. Filtrées comme les prestataires (par quartier, ou par métier tapé).
+  const motMetier = texte.trim().toLowerCase();
+  const demandesVisibles =
+    moi?.role !== 'prestataire'
+      ? []
+      : vue.demandes.filter((d) => {
+          if (d.fin <= vue.maintenant || d.userId === userId) return false;
+          if (quartier && !d.zone.toLowerCase().includes(quartier.toLowerCase())) return false;
+          if (parMetier && !d.service.toLowerCase().includes(motMetier)) return false;
+          return true;
+        });
 
   // Le quartier (et le métier tapé) restent dans l'adresse : pages filles et retour les reprennent.
   const cible = quartierLien ?? '';
@@ -150,6 +166,25 @@ export function Mur() {
         />
       </div>
       {contenu}
+      {demandesVisibles.length > 0 && (
+        <section className="mur__clients" aria-label="Demandes des clients">
+          <h2 className="mur__section">Clients</h2>
+          <ul className="mur__demandes">
+            {demandesVisibles.map((d) => (
+              <li key={d.eventId} onClickCapture={memoriser}>
+                <CarteAnnonce
+                  pseudo={d.pseudo}
+                  quand={ilYa(d.creeLe, vue.maintenant)}
+                  resume={`${d.zone} · ${formaterPrix(d.budget)} FCFA · ${d.service}`}
+                  texte={d.texte || undefined}
+                  avecAction
+                  to={cheminFicheDemande(d.eventId, '', quartierLien)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {bouton}
       {compteOuvert && (
         <MonCompte

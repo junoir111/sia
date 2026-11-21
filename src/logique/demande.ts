@@ -22,7 +22,10 @@ export type DemandeClient = {
   fin: number;
 };
 
-export const DUREE_DEMANDE_MS = 7_200_000; // 2 h
+// 24 h (2026-11-21) : une demande reste sur le Mur une journée, pour qu'un prestataire qui n'était pas
+// disponible la retrouve en revenant plus tard (la notification, elle, s'efface avant). Le robot du serveur
+// garde les messages du Mur 25 h : la demande tient donc dans cette fenêtre.
+export const DUREE_DEMANDE_MS = 24 * 60 * 60_000;
 export const TEXTE_DEMANDE_MAX = 140;
 // Les horloges des téléphones ne sont pas parfaitement à l'heure.
 export const TOLERANCE_HORLOGE_MS = 5 * 60_000;
@@ -71,7 +74,7 @@ function entierEntre(v: unknown, min: number, max: number): number | null {
 }
 
 // Garde une demande expirée (le tri se fait dans notification.ts ou l'affichage), mais refuse
-// une fin plus lointaine que 2 h après « maintenant ». Le rôle peut manquer (demande gardée sur le
+// une fin plus lointaine que la durée de vie après « maintenant ». Le rôle peut manquer (demande gardée sur le
 // téléphone) ; s'il est là, ce doit être « client ». Les annonces du Mur : passer par doitNotifier.
 export function nettoyerDemande(
   inconnu: unknown,

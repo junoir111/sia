@@ -24,7 +24,8 @@ export async function preparerPhoto(fichier: File): Promise<Blob> {
   }
   let image: ImageBitmap;
   try {
-    image = await createImageBitmap(fichier);
+    // `from-image` applique l'orientation EXIF avant de redessiner (sinon une photo prise de côté reste tournée).
+    image = await createImageBitmap(fichier, { imageOrientation: 'from-image' });
   } catch {
     throw new Error('Cette image est illisible.');
   }

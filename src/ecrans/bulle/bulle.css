@@ -382,3 +382,56 @@
     transition: none;
   }
 }
+
+/* Bouton « photo » dans la barre de saisie : comme « envoyer », mais discret, à gauche du champ. */
+.bulle__photo {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sia-toucher);
+  height: var(--sia-toucher);
+  padding: 0;
+  background: var(--sia-carte);
+  border: 1px solid var(--sia-ligne);
+  border-radius: var(--sia-rayon-rond);
+  color: var(--sia-texte-doux);
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bulle__photo:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.bulle__photo:disabled {
+  color: var(--sia-eteint);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Photo dans un message : voilée (un bouton « touche pour voir ») ou dévoilée (l'image, 5 s). */
+.message__photo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.message__photo--voile {
+  min-height: 44px;
+  color: var(--sia-texte-doux);
+}
+
+.message__image {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: var(--sia-rayon-carte);
+  object-fit: contain;
+}

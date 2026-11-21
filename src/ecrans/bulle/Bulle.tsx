@@ -12,7 +12,9 @@ import {
   LONGUEUR_MAX_MESSAGE,
   accepterNouvelAppareil,
   bulleSaine,
+  chargerPhoto,
   envoyerMessage,
+  envoyerPhoto,
   prechaufferBulle,
   reessayerMessage,
   signalerEcriture,
@@ -21,10 +23,11 @@ import {
 } from '../../matrix/bulles';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { marquerAffiche } from '../../matrix/ephemere';
+import type { FichierChiffre } from '../../matrix/piece-jointe';
 import { Bandeau } from '../../ui/Bandeau';
 import { FeuilleConfirmation } from '../../ui/FeuilleConfirmation';
 import { RondInitiale } from '../../ui/RondInitiale';
-import { IconeChevron, IconeEnvoyer, IconeRetour } from '../../ui/icones';
+import { IconeAppareilPhoto, IconeChevron, IconeEnvoyer, IconeRetour } from '../../ui/icones';
 import { familleErreur } from '../profil-client/branchements';
 import { useBulles } from '../bulles/useBulles';
 import { EnregistrerClient } from './EnregistrerClient';
@@ -39,6 +42,11 @@ const PROBLEME = 'Un problème est survenu. Réessaie.';
 const PAS_SURE = "Cette bulle n'est pas sûre. Elle a été fermée.";
 /** Le temps de lire « pas sûre » avant le retour au Mur. */
 const RETOUR_PAS_SURE_MS = 3000;
+/** Une photo dévoilée reste visible ce temps-là, puis se recouvre (comme la photo de fiche). */
+const DUREE_PHOTO_VISIBLE_MS = 5000;
+/** Taille d'origine acceptée pour une photo (avant réduction) : garde-fou contre un fichier énorme. */
+const TAILLE_PHOTO_MAX = 25 * 1024 * 1024;
+const PHOTO_TROP_LOURDE = 'Cette image est trop lourde.';
 
 function estNouvelAppareil(e: unknown): boolean {
   return e instanceof ErreurEnvoiBulle && e.code === 'nouvel-appareil';
@@ -71,6 +79,65 @@ function EtatEnvoiMessage({ message, onReessayer }: { message: Message; onReessa
   );
 }
 
+/** Une photo reçue : voilée tant qu'on ne la touche pas ; dévoilée, elle reste 5 s puis se recouvre. */
+function Photo({ c, photo }: { c: MatrixClient; photo: FichierChiffre }) {
+  const [etat, setEtat] = useState<'voile' | 'chargement' | 'affiche' | 'erreur'>('voile');
+  const [url, setUrl] = useState<string | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  function recouvrir() {
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+    setUrl(null);
+    setEtat('voile');
+  }
+
+  // Les octets déchiffrés ne vivent que le temps de l'affichage : on relâche l'image en quittant.
+  useEffect(() => () => recouvrir(), []);
+
+  useEffect(() => {
+    if (etat !== 'affiche') return;
+    const minuterie = setTimeout(recouvrir, DUREE_PHOTO_VISIBLE_MS);
+    return () => clearTimeout(minuterie);
+  }, [etat, url]);
+
+  async function devoiler() {
+    if (etat === 'chargement' || etat === 'affiche') return;
+    setEtat('chargement');
+    const blob = await chargerPhoto(c, photo);
+    if (!blob) {
+      setEtat('erreur');
+      return;
+    }
+    const nouvelle = URL.createObjectURL(blob);
+    urlRef.current = nouvelle;
+    setUrl(nouvelle);
+    setEtat('affiche');
+  }
+
+  if (etat === 'affiche' && url) {
+    return (
+      <button type="button" className="message__photo" onClick={recouvrir} aria-label="Cacher la photo">
+        <img className="message__image" src={url} alt="Photo" />
+      </button>
+    );
+  }
+  const libelle =
+    etat === 'chargement' ? 'Photo…' : etat === 'erreur' ? 'Photo illisible' : 'Touche pour voir';
+  return (
+    <button
+      type="button"
+      className="message__photo message__photo--voile"
+      onClick={() => void devoiler()}
+    >
+      <IconeAppareilPhoto />
+      <span>{libelle}</span>
+    </button>
+  );
+}
+
 /** Un message ; la fine barre se vide jusqu'à son effacement (1 minute après affichage). */
 function BulleMessage({
   c,
@@ -97,7 +164,11 @@ function BulleMessage({
   return (
     <li className={message.moi ? 'message message--moi' : 'message'}>
       <span className="masque">{message.moi ? 'Toi : ' : 'Message : '}</span>
-      <p className="message__texte">{garderMontants(message.texte)}</p>
+      {message.photo ? (
+        <Photo c={c} photo={message.photo} />
+      ) : (
+        <p className="message__texte">{garderMontants(message.texte)}</p>
+      )}
       <span className="message__piste" aria-hidden="true">
         <span className="message__temps" style={style} />
       </span>
@@ -157,7 +228,10 @@ export function Bulle() {
     id?: string;
   } | null>(null);
   const [acceptation, setAcceptation] = useState(false);
+  // Photo bloquée par un nouvel appareil : à renvoyer après acceptation.
+  const [photoAppareil, setPhotoAppareil] = useState<Blob | null>(null);
   const dernierSignal = useRef(0);
+  const champPhoto = useRef<HTMLInputElement>(null);
   const fin = useRef<HTMLDivElement>(null);
 
   const bulle = bulles?.find((b) => b.roomId === roomId) ?? null;
@@ -231,6 +305,25 @@ export function Bulle() {
     );
   }
 
+  /** Photo choisie (galerie ou appareil) : partie tout de suite, chiffrée. Le champ fichier se vide pour pouvoir renvoyer la même. */
+  function choisirPhoto(fichier: File | undefined) {
+    if (champPhoto.current) champPhoto.current.value = '';
+    if (!client || !peutEcrire || !fichier) return;
+    setBandeau(null);
+    if (fichier.size > TAILLE_PHOTO_MAX) {
+      setBandeau(PHOTO_TROP_LOURDE);
+      return;
+    }
+    void envoyerPhoto(client, roomId, fichier).catch((erreur: unknown) => {
+      if (estNouvelAppareil(erreur)) {
+        setPhotoAppareil(fichier);
+        setAppareil({ corps: '', erreur: null });
+      } else if (!estPasEnvoye(erreur)) {
+        setBandeau(messageErreur(erreur));
+      }
+    });
+  }
+
   /** Entrée envoie (sauf pendant une saisie en cours de composition du clavier). */
   function toucheChamp(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
@@ -253,11 +346,16 @@ export function Bulle() {
     setAcceptation(true);
     try {
       await accepterNouvelAppareil(client, roomId);
-      const envoi =
-        appareil.id === undefined
-          ? envoyerMessage(client, roomId, appareil.corps)
-          : reessayerMessage(client, roomId, appareil.id);
-      if (appareil.id === undefined) setTexte('');
+      let envoi: Promise<string>;
+      if (photoAppareil) {
+        envoi = envoyerPhoto(client, roomId, photoAppareil);
+        setPhotoAppareil(null);
+      } else if (appareil.id === undefined) {
+        envoi = envoyerMessage(client, roomId, appareil.corps);
+        setTexte('');
+      } else {
+        envoi = reessayerMessage(client, roomId, appareil.id);
+      }
       setAppareil(null);
       dernierSignal.current = 0;
       void signalerEcriture(client, roomId, false).catch(() => undefined);
@@ -354,6 +452,24 @@ export function Bulle() {
         {bandeau && <Bandeau message={bandeau} />}
         <div className="bulle__rangee">
           <input
+            ref={champPhoto}
+            type="file"
+            accept="image/*"
+            className="masque"
+            aria-label="Envoyer une photo"
+            disabled={!peutEcrire}
+            onChange={(e) => choisirPhoto(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            className="bulle__photo"
+            aria-label="Envoyer une photo"
+            disabled={!peutEcrire}
+            onClick={() => champPhoto.current?.click()}
+          >
+            <IconeAppareilPhoto />
+          </button>
+          <input
             className="bulle__champ"
             aria-label="Écris un message"
             placeholder="Écris un message"
@@ -384,7 +500,10 @@ export function Bulle() {
           chargement={acceptation}
           erreur={appareil.erreur}
           onConfirmer={() => void continuerAppareil()}
-          onAnnuler={() => setAppareil(null)}
+          onAnnuler={() => {
+            setAppareil(null);
+            setPhotoAppareil(null);
+          }}
         />
       )}
 

@@ -91,6 +91,27 @@
   margin-top: 16px;
 }
 
+/* Section « Clients » : les demandes posées sur le Mur, en liste sous la grille des prestataires. */
+.mur__clients {
+  margin-top: 24px;
+}
+
+.mur__section {
+  margin: 0 0 12px;
+  font-size: var(--sia-titre);
+  font-weight: 700;
+  line-height: 28px;
+}
+
+.mur__demandes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 /* --- Mon compte --- */
 .compte__qui {
   display: flex;

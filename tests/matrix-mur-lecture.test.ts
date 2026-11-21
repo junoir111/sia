@@ -237,7 +237,7 @@ describe('lireDemandes', () => {
         annonce('mal', '@q:sia.tail94dc60.ts.net', MAINTENANT, '$q1', { budget: 0 }),
         annonce('long', '@r:sia.tail94dc60.ts.net', MAINTENANT, '$r1', { texte: 'x'.repeat(141) }),
         annonce('loin', '@s:sia.tail94dc60.ts.net', MAINTENANT, '$s1', {
-          fin: MAINTENANT + 5 * HEURE,
+          fin: MAINTENANT + 26 * HEURE,
         }),
         annonce('presta', '@u:sia.tail94dc60.ts.net', MAINTENANT, '$u1', { role: 'prestataire' }),
       ]),

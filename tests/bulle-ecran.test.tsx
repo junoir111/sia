@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CHEMINS, cheminBulle } from '../src/chemins';
@@ -9,7 +9,9 @@ import {
   ErreurEnvoiBulle,
   accepterNouvelAppareil,
   bulleSaine,
+  chargerPhoto,
   envoyerMessage,
+  envoyerPhoto,
   listerBulles,
   prechaufferBulle,
   reessayerMessage,
@@ -39,9 +41,11 @@ vi.mock('../src/matrix/bulles', async (importOriginal) => ({
   LONGUEUR_MAX_MESSAGE: 1000,
   accepterNouvelAppareil: vi.fn(),
   bulleSaine: vi.fn(),
+  chargerPhoto: vi.fn(),
   ecouterBulles: vi.fn(() => () => undefined),
   listerBulles: vi.fn(),
   envoyerMessage: vi.fn(),
+  envoyerPhoto: vi.fn(),
   prechaufferBulle: vi.fn(),
   reessayerMessage: vi.fn(),
   signalerEcriture: vi.fn(),
@@ -61,10 +65,21 @@ type FauxEv = {
   efface?: boolean;
   enClair?: boolean;
   illisible?: boolean;
+  /** Contenu d'un message PHOTO (événement m.image avec un fichier chiffré). */
+  photo?: unknown;
   /** Statut d'un écho local (null : événement venu du serveur). */
   status?: string | null;
   txn?: string;
   roomId?: string;
+};
+
+/** Fichier chiffré bien formé (reconnu par estFichierChiffre). */
+const FICHIER_PHOTO = {
+  v: 'v2',
+  url: 'mxc://sia.tail94dc60.ts.net/abc',
+  iv: 'AAAAAAAAAAAAAAAA',
+  key: { alg: 'A256CTR', k: 'kkkk', kty: 'oct' },
+  hashes: { sha256: 'hhhh' },
 };
 
 const ETAT_BULLE = {
@@ -79,7 +94,10 @@ function fauxEvenement(e: FauxEv) {
   return {
     getId: () => e.id,
     getType: () => e.type ?? 'm.room.message',
-    getContent: () => ({ msgtype: 'm.text', body: e.body }),
+    getContent: () =>
+      e.photo
+        ? { msgtype: 'm.image', body: 'Photo', file: e.photo }
+        : { msgtype: 'm.text', body: e.body },
     getSender: () => e.sender,
     getRoomId: () => e.roomId ?? SALON,
     status: e.status ?? null,
@@ -457,5 +475,77 @@ describe('Écran Bulle (M4)', () => {
     await Promise.resolve();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(champ()).toHaveValue('');
+  });
+});
+
+describe('Photos dans la bulle', () => {
+  const vraiCreer = URL.createObjectURL;
+  const vraiRevoke = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:photo');
+    URL.revokeObjectURL = vi.fn();
+    client = fauxClient([{ id: '$ph', body: 'Photo', sender: AUTRE, photo: FICHIER_PHOTO }]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    vi.mocked(listerBulles).mockReset().mockReturnValue([resume()]);
+    vi.mocked(bulleSaine).mockReset().mockReturnValue(true);
+    vi.mocked(surveillerBulle).mockReset().mockReturnValue(() => undefined);
+    vi.mocked(signalerEcriture).mockReset().mockResolvedValue(undefined);
+    vi.mocked(marquerAffiche).mockReset();
+    vi.mocked(pseudoDe).mockReturnValue('palmier-48');
+    vi.mocked(chargerPhoto).mockReset();
+    vi.mocked(envoyerPhoto).mockReset().mockResolvedValue('$px');
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = vraiCreer;
+    URL.revokeObjectURL = vraiRevoke;
+    vi.useRealTimers();
+  });
+
+  it('une photo reçue est voilée ; on la touche et elle s’affiche', async () => {
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' });
+    vi.mocked(chargerPhoto).mockResolvedValue(blob);
+    afficher();
+    expect(screen.queryByRole('img', { name: 'Photo' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Touche pour voir/ }));
+    const img = await screen.findByRole('img', { name: 'Photo' });
+    expect(img).toHaveAttribute('src', 'blob:photo');
+    expect(chargerPhoto).toHaveBeenCalledWith(client, FICHIER_PHOTO);
+  });
+
+  it('dévoilée, la photo se recouvre au bout de 5 s et les octets sont relâchés', async () => {
+    vi.mocked(chargerPhoto).mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }));
+    vi.useFakeTimers();
+    afficher();
+    fireEvent.click(screen.getByRole('button', { name: /Touche pour voir/ }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('img', { name: 'Photo' })).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.queryByRole('img', { name: 'Photo' })).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:photo');
+  });
+
+  it('photo illisible : un repère, pas d’image', async () => {
+    vi.mocked(chargerPhoto).mockResolvedValue(null);
+    afficher();
+    fireEvent.click(screen.getByRole('button', { name: /Touche pour voir/ }));
+    expect(await screen.findByText('Photo illisible')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Photo' })).not.toBeInTheDocument();
+  });
+
+  it('le bouton photo de la barre envoie la photo choisie', async () => {
+    client = fauxClient([]);
+    vi.mocked(useMatrix).mockReturnValue({ client, etat: 'pret' });
+    afficher();
+    const fichier = new File([new Uint8Array([9, 9, 9])], 'moi.jpg', { type: 'image/jpeg' });
+    const entree = screen.getByLabelText('Envoyer une photo', { selector: 'input' });
+    fireEvent.change(entree, { target: { files: [fichier] } });
+    await vi.waitFor(() => expect(envoyerPhoto).toHaveBeenCalledWith(client, SALON, fichier));
   });
 });

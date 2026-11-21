@@ -31,8 +31,8 @@ const demandeValide: DemandeClient = {
 const evenement = { role: 'client', ...demandeValide };
 
 describe('constantes', () => {
-  it('une demande dure 2 h, texte 140 signes', () => {
-    expect(DUREE_DEMANDE_MS).toBe(7_200_000);
+  it('une demande dure 24 h, texte 140 signes', () => {
+    expect(DUREE_DEMANDE_MS).toBe(24 * 60 * 60_000);
     expect(TEXTE_DEMANDE_MAX).toBe(140);
   });
 });
@@ -53,7 +53,7 @@ describe('verifierDemande : caractères pièges', () => {
 });
 
 describe('verifierDemande', () => {
-  it('rend la demande propre avec fin = maintenant + 2 h', () => {
+  it('rend la demande propre avec fin = maintenant + 24 h', () => {
     const r = verifierDemande(
       saisie({ pseudo: ' palmier-48 ', texte: ' Fuite sous l’évier ' }),
       MAINTENANT,

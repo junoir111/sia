@@ -127,7 +127,7 @@ describe('publierDemande / retirerDemande', () => {
   it('refuse une demande expirée, trop longue ou au budget invalide', async () => {
     const c = fauxClient([mur()]);
     await expect(publierDemande(comme(c), demande(MAINTENANT - 1))).rejects.toThrow();
-    await expect(publierDemande(comme(c), demande(MAINTENANT + 3 * HEURE))).rejects.toThrow();
+    await expect(publierDemande(comme(c), demande(MAINTENANT + 25 * HEURE))).rejects.toThrow();
     await expect(
       publierDemande(comme(c), { ...demande(), texte: 'x'.repeat(141) }),
     ).rejects.toThrow();
@@ -188,7 +188,7 @@ describe('lireDemande', () => {
   it('refuse une demande effacée, sans rôle client, ou à la fin trop lointaine après son envoi', () => {
     expect(lireDemande(annonce(contenu, { redacted: true }))).toBeNull();
     expect(lireDemande(annonce({ ...contenu, role: 'prestataire' }))).toBeNull();
-    expect(lireDemande(annonce(contenu, { ts: MAINTENANT - 5 * HEURE }))).toBeNull();
+    expect(lireDemande(annonce(contenu, { ts: MAINTENANT - 26 * HEURE }))).toBeNull();
     expect(lireDemande(annonce({ ...contenu, budget: '5000' }))).toBeNull();
     expect(lireDemande(evenement({ type: 'io.sia.statut', content: contenu }))).toBeNull();
   });

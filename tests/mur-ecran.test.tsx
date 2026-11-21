@@ -271,6 +271,27 @@ describe('Écrans du Mur', () => {
       expect(screen.getByText('écran profil prestataire')).toBeInTheDocument();
     });
 
+    it('prestataire : la demande d’un client est dans la section « Clients » et ouvre sa fiche', async () => {
+      vi.mocked(lireProfil).mockResolvedValue(PROFIL_PRESTA);
+      afficher(CHEMINS.mur);
+      await screen.findByRole('link', { name: 'Je suis disponible' });
+      const clients = screen.getByRole('region', { name: 'Demandes des clients' });
+      const carte = within(clients).getByRole('link', { name: /palmier-48/ });
+      expect(carte).toHaveTextContent("Fuite sous l'évier");
+      expect(carte).toHaveAttribute('href', '/mur/demande/%24d1');
+      fireEvent.click(carte);
+      expect(await screen.findByRole('button', { name: /D'accord/ })).toBeInTheDocument();
+    });
+
+    it('client : aucune section « Clients » (il ne voit pas les demandes des autres)', async () => {
+      afficher(CHEMINS.mur);
+      await screen.findByRole('link', { name: 'Publier une demande' });
+      expect(
+        screen.queryByRole('region', { name: 'Demandes des clients' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('palmier-48')).not.toBeInTheDocument();
+    });
+
     it('Mon compte : profil, bulles et Se déconnecter ; Fermer referme', async () => {
       afficher(CHEMINS.mur);
       await screen.findByRole('link', { name: 'Publier une demande' });

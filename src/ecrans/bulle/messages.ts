@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { EventStatus, MatrixEventEvent, RoomEvent } from 'matrix-js-sdk';
+import { EventStatus, MatrixEventEvent, MsgType, RoomEvent } from 'matrix-js-sdk';
 import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 import { DUREE_MESSAGE_MS } from '../../config';
 import { LONGUEUR_MAX_MESSAGE, lireEtat } from '../../matrix/bulles';
 import { echeanceEffacement } from '../../matrix/ephemere';
+import { estFichierChiffre, type FichierChiffre } from '../../matrix/piece-jointe';
 
 /*
  * Messages texte d'une bulle, lus dans le fil Matrix déjà déchiffré.
@@ -16,8 +17,19 @@ import { echeanceEffacement } from '../../matrix/ephemere';
 /** État d'envoi de mon message : confirmé par le serveur, en cours, ou pas envoyé (réessayable). */
 export type EtatEnvoi = 'confirme' | 'en-cours' | 'echec';
 
-/** `cle` reste la même quand l'écho local devient le message confirmé (son `id` change). */
-export type Message = { id: string; cle: string; texte: string; moi: boolean; envoi: EtatEnvoi };
+/**
+ * `cle` reste la même quand l'écho local devient le message confirmé (son `id` change).
+ * `photo` est présent pour un message image (alors `texte` est vide) : la référence du fichier chiffré,
+ * à télécharger et déchiffrer au moment de l'afficher.
+ */
+export type Message = {
+  id: string;
+  cle: string;
+  texte: string;
+  moi: boolean;
+  envoi: EtatEnvoi;
+  photo?: FichierChiffre;
+};
 
 /** Statuts d'un écho local (les autres, dont « annulé », ne sont pas montrés). */
 const ETATS_ECHO = new Map<EventStatus, EtatEnvoi>([
@@ -50,16 +62,17 @@ function lireMessage(
   if (echo === null && (!ev.isEncrypted() || ev.isDecryptionFailure())) return null;
   const expediteur = ev.getSender();
   if (!expediteur || !participants.has(expediteur)) return null;
-  const corps: unknown = ev.getContent().body;
-  if (typeof corps !== 'string' || corps.trim() === '') return null;
+  const contenu = ev.getContent();
   const txn = ev.getTxnId();
-  return {
-    id,
-    cle: typeof txn === 'string' && txn !== '' ? `txn:${txn}` : id,
-    texte: corps.slice(0, LONGUEUR_MAX_MESSAGE),
-    moi: expediteur === moi,
-    envoi: echo ?? 'confirme',
-  };
+  const cle = typeof txn === 'string' && txn !== '' ? `txn:${txn}` : id;
+  const commun = { id, cle, moi: expediteur === moi, envoi: echo ?? 'confirme' } as const;
+  // Message PHOTO : le fichier chiffré est vérifié ici ; les octets sont téléchargés et déchiffrés à l'affichage.
+  if (contenu.msgtype === MsgType.Image && estFichierChiffre(contenu.file)) {
+    return { ...commun, texte: '', photo: contenu.file };
+  }
+  const corps: unknown = contenu.body;
+  if (typeof corps !== 'string' || corps.trim() === '') return null;
+  return { ...commun, texte: corps.slice(0, LONGUEUR_MAX_MESSAGE) };
 }
 
 /** Les 2 comptes inscrits dans l'état io.sia.bulle, ou null si l'état est absent ou invalide. */

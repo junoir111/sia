@@ -14,6 +14,7 @@ import {
   type RoomState,
 } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
+import { preparerPhoto } from '../appareil/photo';
 import { nettoyerClients } from '../logique/clients';
 import type { DemandeClient } from '../logique/demande';
 import {
@@ -42,6 +43,12 @@ import {
   retirerDemande,
   trouverDemande,
 } from './mur';
+import {
+  chiffrerImage,
+  dechiffrerImage,
+  estFichierChiffre,
+  type FichierChiffre,
+} from './piece-jointe';
 
 /*
  * Bulles : salons à 2 personnes, TOUJOURS chiffrés (megolm). On refuse d'y écrire sinon.
@@ -64,6 +71,8 @@ export type ResumeBulle = {
 
 /** Longueur maximale d'un message (pas fixée par le document 5 : garde-fou contre les envois énormes). */
 export const LONGUEUR_MAX_MESSAGE = 1000;
+/** Plafond des octets chiffrés d'une photo à télécharger (une vraie photo réduite pèse moins d'1 Mo). */
+const TAILLE_PAQUET_MAX = 10 * 1024 * 1024;
 const DUREE_ECRITURE_MS = 5000;
 const ATTENTE_CHIFFREMENT_MS = 10_000;
 /** Pas entre deux relectures locales (sans réseau) en attendant que la synchro apporte la bulle. */
@@ -1285,6 +1294,79 @@ export async function envoyerMessage(
   return envoyerVerifie(c, roomId, () =>
     c.sendMessage(roomId, { msgtype: MsgType.Text, body: corps }),
   );
+}
+
+/**
+ * Envoie une PHOTO dans une bulle chiffrée et saine. La photo est d'abord réduite et réencodée en JPEG
+ * (cela retire le GPS et le modèle du téléphone), puis chiffrée sur CE téléphone : le serveur ne reçoit qu'un
+ * paquet d'octets illisibles, sans type d'image ni nom de fichier. La clé voyage dans l'événement chiffré, et
+ * disparaît quand il s'efface (1 min, ou robot). Mêmes refus que pour un message texte.
+ */
+export async function envoyerPhoto(c: MatrixClient, roomId: string, image: Blob): Promise<string> {
+  if (!(image instanceof Blob)) throw new Error('Photo invalide.');
+  salonValide(c, roomId);
+  // Verrou avant même de préparer/envoyer : bulle fermée ou appareil inconnu => rien ne part.
+  const preparation = preparationConnue(c, roomId) ?? (await preparationFraiche(c, roomId));
+  controleAvantEnvoi(c, roomId, preparation);
+
+  const jpeg = await preparerPhoto(image as File);
+  let largeur = 0;
+  let hauteur = 0;
+  try {
+    const bitmap = await createImageBitmap(jpeg);
+    largeur = bitmap.width;
+    hauteur = bitmap.height;
+    bitmap.close();
+  } catch {
+    // Dimensions facultatives : l'affichage s'adapte sans elles.
+  }
+  const { chiffre, file } = await chiffrerImage(jpeg);
+  const paquet = new Blob([chiffre as BlobPart], { type: 'application/octet-stream' });
+  const { content_uri } = await c.uploadContent(paquet, {
+    type: 'application/octet-stream',
+    includeFilename: false,
+  });
+
+  // Dernier contrôle, au plus près de l'envoi (le téléversement a pu prendre du temps).
+  const fraiche = preparationConnue(c, roomId) ?? preparation;
+  controleAvantEnvoi(c, roomId, fraiche);
+  const contenu = {
+    msgtype: MsgType.Image,
+    body: 'Photo',
+    info: {
+      mimetype: 'image/jpeg',
+      size: chiffre.length,
+      ...(largeur && hauteur ? { w: largeur, h: hauteur } : {}),
+    },
+    file: { ...file, url: content_uri },
+  };
+  return envoyerVerifie(c, roomId, () => c.sendMessage(roomId, contenu as never));
+}
+
+/**
+ * Télécharge les octets chiffrés d'une photo reçue et les déchiffre. Rend un Blob affichable, ou null si le
+ * téléchargement, l'empreinte ou le déchiffrement échoue (jamais d'exception). Le serveur n'a vu que le paquet chiffré.
+ */
+export async function chargerPhoto(c: MatrixClient, file: FichierChiffre): Promise<Blob | null> {
+  if (!estFichierChiffre(file)) return null;
+  const url = c.mxcUrlToHttp(file.url, undefined, undefined, undefined, false, true, true);
+  if (!url) return null;
+  const jeton = c.getAccessToken();
+  try {
+    const reponse = await fetch(url, {
+      headers: jeton ? { Authorization: `Bearer ${jeton}` } : {},
+    });
+    if (!reponse.ok) return null;
+    // Plafond de taille : un correspondant malveillant pourrait pointer vers un paquet énorme. Une vraie
+    // photo réduite pèse moins d'1 Mo ; on refuse au-delà, d'abord par l'en-tête, puis sur les octets reçus.
+    const annonce = Number(reponse.headers.get('content-length'));
+    if (Number.isFinite(annonce) && annonce > TAILLE_PAQUET_MAX) return null;
+    const octets = new Uint8Array(await reponse.arrayBuffer());
+    if (octets.length > TAILLE_PAQUET_MAX) return null;
+    return await dechiffrerImage(file, octets);
+  } catch {
+    return null;
+  }
 }
 
 /** Mon message resté « pas envoyé » dans cette bulle (écho local), ou null. */

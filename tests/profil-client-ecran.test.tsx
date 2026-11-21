@@ -150,7 +150,7 @@ describe('Écran Page client (E6)', () => {
       budget: 5000,
       texte: "Fuite sous l'évier, ce soir",
     });
-    expect(demande?.fin).toBeGreaterThanOrEqual(avant + 7_200_000);
+    expect(demande?.fin).toBeGreaterThanOrEqual(avant + 23 * 60 * 60_000);
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('sia.demande') ?? '{}')).toMatchObject({
         eventId: '$demande1',
