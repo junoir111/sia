@@ -20,7 +20,10 @@ import type {
 } from '../../logique/profil';
 import type { Session } from '../../matrix/auth';
 import { monStatutActif, publierStatut, retirerStatut } from '../../matrix/mur';
-import { reglerNotificationDemandes } from '../../matrix/notifications';
+import {
+  reglerNotificationDemandes,
+  reglerNotificationPrestataires,
+} from '../../matrix/notifications';
 import { enregistrerProfil, lireProfil, lirePseudoEnregistre } from '../../matrix/profil';
 import type { ErreurProfil } from '../../matrix/profil';
 import { lireSession } from '../../matrix/session';
@@ -104,7 +107,11 @@ async function mettreEnLigne(
     // Le statut est publié sur le Mur ; seul le secours du téléphone manque.
   }
   // Disponible : prévenir (même appli fermée) quand un client pose une demande.
-  if (client) void reglerNotificationDemandes(client, true);
+  // Et, dès maintenant, ne plus l'être pour les statuts des confrères (le cas d'un client devenu prestataire).
+  if (client) {
+    void reglerNotificationDemandes(client, true);
+    void reglerNotificationPrestataires(client, false);
+  }
   signalerDisponible();
   return null;
 }

@@ -12,6 +12,7 @@ import { LIMITES, formaterPrix, lirePrix, pseudoPropose } from '../../logique/pr
 import type { Session } from '../../matrix/auth';
 import type { ResumeBulle } from '../../matrix/bulles';
 import { publierDemande, retirerDemande } from '../../matrix/mur';
+import { reglerNotificationPrestataires } from '../../matrix/notifications';
 import {
   enregistrerProfilClient,
   lireProfilClient,
@@ -257,6 +258,8 @@ export function ProfilClient() {
     const demande = verifie.demande;
     // Les écrans suivants (Mur, fiches) savent tout de suite qui je suis, sans attendre le serveur.
     memoriserMoi(session.userId, { role: 'client', pseudo: demande.pseudo, zone: demande.zone });
+    // Dès la première demande : prévenu quand un prestataire se rend disponible (sans attendre la prochaine ouverture).
+    if (client) void reglerNotificationPrestataires(client, true);
     // Au Mur dès le toucher. Le serveur travaille derrière ; s'il refuse, on revient ici avec ce qui était tapé.
     navigate(cheminMur());
     const erreur = await enFile(() => publierLaDemande(session, client, demande, enCours));

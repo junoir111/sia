@@ -10,6 +10,10 @@ import { monStatutActif, publierStatut, retirerStatut } from '../src/matrix/mur'
 import { enregistrerProfil, lireProfil } from '../src/matrix/profil';
 import { lireSession } from '../src/matrix/session';
 import { ecrireDisponible, lireDisponible } from '../src/appareil/disponible';
+import {
+  reglerNotificationDemandes,
+  reglerNotificationPrestataires,
+} from '../src/matrix/notifications';
 import { coupureReseau, differe } from './faux-ecran';
 
 // Jamais le vrai serveur ni le vrai stockage : tout est simulé.
@@ -32,6 +36,10 @@ vi.mock('../src/matrix/bulles', () => ({
 vi.mock('../src/appareil/disponible', () => ({
   lireDisponible: vi.fn(),
   ecrireDisponible: vi.fn(),
+}));
+vi.mock('../src/matrix/notifications', () => ({
+  reglerNotificationDemandes: vi.fn(async () => undefined),
+  reglerNotificationPrestataires: vi.fn(async () => undefined),
 }));
 vi.mock('../src/appareil/photo', () => ({
   lirePhoto: vi.fn().mockResolvedValue(null),
@@ -168,6 +176,17 @@ describe('Écran Profil prestataire (E5)', () => {
       services: [{ label: 'Réparer une fuite', prix: 5000 }],
     });
     expect(statut?.fin).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+  });
+
+  it('SIA touché : prévenu des demandes, et plus des confrères (un client devenu prestataire)', async () => {
+    vi.mocked(enregistrerProfil).mockResolvedValue({ ok: true });
+    afficher();
+    await attendreChargement();
+    remplir();
+    fireEvent.click(boutonSia());
+
+    await waitFor(() => expect(reglerNotificationDemandes).toHaveBeenCalledWith(CLIENT, true));
+    expect(reglerNotificationPrestataires).toHaveBeenCalledWith(CLIENT, false);
   });
 
   it('déjà visible : un toucher sur SIA éteint, sans quitter la page', async () => {

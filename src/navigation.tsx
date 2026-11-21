@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CHEMINS } from './chemins';
 import { FournisseurMatrix, useMatrix } from './coquille/FournisseurMatrix';
 import { Garde } from './coquille/Garde';
+import { ReglesNotifications } from './coquille/ReglesNotifications';
 import { RetourSysteme } from './coquille/RetourSysteme';
 import { VerrouAppli } from './coquille/VerrouAppli';
 import { Accueil } from './ecrans/accueil/Accueil';
@@ -116,6 +117,7 @@ export function AppSia() {
   return (
     <FournisseurMatrix>
       <RetourSysteme />
+      <ReglesNotifications />
       <VerrouAppli>
         <BandeauSiPret />
         <RoutesSia />

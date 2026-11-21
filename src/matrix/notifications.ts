@@ -7,7 +7,7 @@ import {
 import { lireDisponible } from '../appareil/disponible';
 import { pushNatif, type PushNatif } from '../appareil/push-natif';
 import { APP_ID_PUSH, URL_PASSERELLE_PUSH } from '../config';
-import { TYPE_ANNONCE } from './evenements';
+import { TYPE_ANNONCE, TYPE_STATUT } from './evenements';
 import { rejoindreMur } from './mur';
 
 /*
@@ -22,6 +22,8 @@ const DELAI_RETRAIT_MS = 5_000;
 const NOM_APPLI = 'SIA';
 /** Règle de notification des demandes de clients (les règles par défaut ne connaissent pas ce type d'événement). */
 const ID_REGLE_DEMANDES = 'sia.demandes';
+/** Règle de notification des prestataires qui se rendent disponibles (pour les clients). */
+const ID_REGLE_PRESTATAIRES = 'sia.prestataires';
 
 /** Ce que voit l'écran « Mon compte ». `inactif` = navigateur ou pas encore lancé. */
 export type StatutNotifications = 'inactif' | 'actif' | 'indisponible' | 'autorisation-refusee';
@@ -106,6 +108,34 @@ async function ecouter(natif: PushNatif, client: MatrixClient): Promise<void> {
 }
 
 /**
+ * Pose (ou retire) une règle « prévenir pour ce type d'événement sur le Mur ». Ne rejette jamais :
+ * règle déjà absente, serveur injoignable — elle sera refaite à la prochaine ouverture ou au prochain changement.
+ */
+async function reglerSurLeMur(
+  client: MatrixClient,
+  id: string,
+  type: string,
+  actif: boolean,
+): Promise<void> {
+  try {
+    if (!actif) {
+      await client.deletePushRule('global', PushRuleKind.Override, id);
+      return;
+    }
+    const salonMur = await rejoindreMur(client);
+    await client.addPushRule('global', PushRuleKind.Override, id, {
+      conditions: [
+        { kind: ConditionKind.EventMatch, key: 'type', pattern: type },
+        { kind: ConditionKind.EventMatch, key: 'room_id', pattern: salonMur },
+      ],
+      actions: [PushRuleActionName.Notify],
+    });
+  } catch {
+    // Voir le commentaire ci-dessus : l'échec n'est jamais bloquant.
+  }
+}
+
+/**
  * Prestataire DISPONIBLE : prévenir quand un client pose une demande sur le Mur (pas de notification sinon : un client
  * n'a pas à être dérangé par les demandes des autres). Ne rejette jamais.
  */
@@ -113,22 +143,18 @@ export async function reglerNotificationDemandes(
   client: MatrixClient,
   disponible: boolean,
 ): Promise<void> {
-  try {
-    if (!disponible) {
-      await client.deletePushRule('global', PushRuleKind.Override, ID_REGLE_DEMANDES);
-      return;
-    }
-    const salonMur = await rejoindreMur(client);
-    await client.addPushRule('global', PushRuleKind.Override, ID_REGLE_DEMANDES, {
-      conditions: [
-        { kind: ConditionKind.EventMatch, key: 'type', pattern: TYPE_ANNONCE },
-        { kind: ConditionKind.EventMatch, key: 'room_id', pattern: salonMur },
-      ],
-      actions: [PushRuleActionName.Notify],
-    });
-  } catch {
-    // Règle déjà absente, serveur injoignable : elle sera refaite à la prochaine ouverture ou au prochain changement.
-  }
+  await reglerSurLeMur(client, ID_REGLE_DEMANDES, TYPE_ANNONCE, disponible);
+}
+
+/**
+ * CLIENT : prévenir quand un prestataire se rend disponible sur le Mur. Un prestataire, lui, n'est pas
+ * dérangé par les statuts de ses confrères (`estClient` faux retire la règle). Ne rejette jamais.
+ */
+export async function reglerNotificationPrestataires(
+  client: MatrixClient,
+  estClient: boolean,
+): Promise<void> {
+  await reglerSurLeMur(client, ID_REGLE_PRESTATAIRES, TYPE_STATUT, estClient);
 }
 
 /**

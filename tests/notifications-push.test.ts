@@ -10,6 +10,7 @@ import {
   arreterNotifications,
   lancerNotifications,
   reglerNotificationDemandes,
+  reglerNotificationPrestataires,
   statutNotifications,
 } from '../src/matrix/notifications';
 
@@ -172,5 +173,42 @@ describe('notification des demandes (prestataire disponible)', () => {
     await lancerNotifications(c);
     await vi.waitFor(() => expect(deletePushRule).toHaveBeenCalledTimes(1));
     expect(addPushRule).not.toHaveBeenCalled();
+  });
+});
+
+describe('notification des prestataires qui se rendent disponibles (client)', () => {
+  it('client : une règle prévient d’un statut de prestataire posé sur le Mur, et de rien d’autre', async () => {
+    const { c, addPushRule } = client();
+    await reglerNotificationPrestataires(c, true);
+    expect(addPushRule).toHaveBeenCalledWith('global', 'override', 'sia.prestataires', {
+      conditions: [
+        { kind: 'event_match', key: 'type', pattern: 'io.sia.statut' },
+        { kind: 'event_match', key: 'room_id', pattern: '!mur:sia.tail94dc60.ts.net' },
+      ],
+      actions: ['notify'],
+    });
+  });
+
+  it('prestataire : la règle est retirée (pas dérangé par ses confrères)', async () => {
+    const { c, addPushRule, deletePushRule } = client();
+    await reglerNotificationPrestataires(c, false);
+    expect(deletePushRule).toHaveBeenCalledWith('global', 'override', 'sia.prestataires');
+    expect(addPushRule).not.toHaveBeenCalled();
+  });
+
+  it('une règle déjà absente ou un serveur injoignable ne fait jamais échouer', async () => {
+    const { c, addPushRule, deletePushRule } = client();
+    deletePushRule.mockRejectedValue({ httpStatus: 404 });
+    addPushRule.mockRejectedValue(new TypeError('réseau'));
+    await expect(reglerNotificationPrestataires(c, false)).resolves.toBeUndefined();
+    await expect(reglerNotificationPrestataires(c, true)).resolves.toBeUndefined();
+  });
+
+  it('les deux règles sont séparées : poser l’une ne touche pas l’autre', async () => {
+    const { c, addPushRule } = client();
+    await reglerNotificationDemandes(c, true);
+    await reglerNotificationPrestataires(c, true);
+    const identifiants = (addPushRule.mock.calls as unknown as string[][]).map(([, , id]) => id);
+    expect(identifiants).toEqual(['sia.demandes', 'sia.prestataires']);
   });
 });
