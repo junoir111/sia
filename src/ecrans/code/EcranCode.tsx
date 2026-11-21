@@ -97,7 +97,7 @@ export function EcranCode({ mode }: { mode: Mode }) {
         refuser(texteEssais(resultat.restants));
       }
     } catch {
-      refuser('Impossible de vérifier le code. Réessaie.');
+      refuser('Le code n’a pas pu être vérifié. Réessaie.');
     }
   }
 
@@ -116,7 +116,7 @@ export function EcranCode({ mode }: { mode: Mode }) {
     try {
       await definirCode(code); // la porte s'ouvre : cet écran disparaît
     } catch {
-      refuser('Ce téléphone ne peut pas garder le code. Réessaie.');
+      refuser('Le téléphone n’a pas pu garder le code. Réessaie.');
     }
   }
 

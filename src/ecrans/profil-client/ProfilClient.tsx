@@ -43,8 +43,8 @@ import { deposerEchec, ecouterEchec, reprendreEchec } from './echec-publication'
 import './profil-client.css';
 
 const MESSAGES: Record<Exclude<ErreurReseau, 'session'>, string> = {
-  reseau: 'Pas de connexion. Réessaie dans un instant.',
-  inconnue: 'Un problème est survenu. Réessaie.',
+  reseau: 'Pas de réseau. Réessaie dans un instant.',
+  inconnue: 'Ça n’a pas marché. Réessaie.',
 };
 
 /** Prestataires qui ont dit oui à MA demande en cours (offres reçues, pas encore acceptées). */

@@ -15,8 +15,8 @@ import { familleErreur } from '../profil-client/branchements';
 import { useClients } from './useClients';
 import './clients.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
+const PROBLEME = 'Ça n’a pas marché. Réessaie.';
 
 function messageErreur(e: unknown): string {
   return familleErreur(e) === 'reseau' ? PAS_DE_RESEAU : PROBLEME;

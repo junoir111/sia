@@ -262,7 +262,7 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
       expect(screen.getByText('Réponse envoyée…')).toBeInTheDocument();
 
       await act(async () => serveur.rejeter(coupureReseau()));
-      expect(screen.getByText('Pas de connexion. Réessaie.')).toBeInTheDocument();
+      expect(screen.getByText('Pas de réseau. Réessaie.')).toBeInTheDocument();
       expect(screen.queryByText('Réponse envoyée…')).not.toBeInTheDocument();
       expect(cartes()).toHaveLength(1);
       expect(vuesGardees()).toEqual([]); // pas marquée vue : on peut encore répondre
@@ -356,7 +356,7 @@ describe('Bandeau de mise en relation (M1 / M2)', () => {
       act(() => bullesChangent([offre('!o:sia', 'mangue-douce')]));
       fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
       await act(async () => serveur.rejeter(coupureReseau()));
-      expect(screen.getByText('Pas de connexion. Réessaie.')).toBeInTheDocument();
+      expect(screen.getByText('Pas de réseau. Réessaie.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Oui' })).toBeInTheDocument();
       expect(screen.queryByText('écran bulle')).not.toBeInTheDocument();
     });

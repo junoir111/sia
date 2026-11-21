@@ -113,7 +113,7 @@ describe('Bouton « Enregistrer ce client » dans la bulle', () => {
     await act(async () => serveur.rejeter(coupureReseau()));
     expect(bouton()).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
     expect(screen.queryByText(/Client enregistré/)).not.toBeInTheDocument();
   });
@@ -123,7 +123,7 @@ describe('Bouton « Enregistrer ce client » dans la bulle', () => {
     afficher();
     fireEvent.click(bouton());
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Un problème est survenu. Réessaie.',
+      'Ça n’a pas marché. Réessaie.',
     );
     fireEvent.click(bouton());
     expect(screen.getByText(/Client enregistré/)).toBeInTheDocument();

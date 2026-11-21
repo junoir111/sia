@@ -117,7 +117,7 @@ describe('Écran Mes clients', () => {
 
     await act(async () => serveur.rejeter(coupureReseau()));
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
     expect(screen.getByRole('button', { name: 'Écrire à zoé-12' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Écrire à zoé-12' })).toHaveTextContent('Écrire');
@@ -129,7 +129,7 @@ describe('Écran Mes clients', () => {
     afficher();
     fireEvent.click(screen.getByRole('button', { name: 'Écrire à abel-7' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Un problème est survenu. Réessaie.',
+      'Ça n’a pas marché. Réessaie.',
     );
   });
 
@@ -163,7 +163,7 @@ describe('Écran Mes clients', () => {
     await act(async () => serveur.rejeter(coupureReseau()));
     expect(screen.getByText('zoé-12')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
   });
 

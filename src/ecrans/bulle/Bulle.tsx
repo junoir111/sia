@@ -37,8 +37,8 @@ import './bulle.css';
 
 /** « En train d'écrire » renvoyé au plus toutes les 3 s pendant la frappe. */
 const RAPPEL_ECRITURE_MS = 3000;
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
+const PROBLEME = 'Ça n’a pas marché. Réessaie.';
 const PAS_SURE = "Cette bulle n'est pas sûre. Elle a été fermée.";
 /** Le temps de lire « pas sûre » avant le retour au Mur. */
 const RETOUR_PAS_SURE_MS = 3000;

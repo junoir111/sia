@@ -43,8 +43,8 @@ describe('réponses « Oui » / « Non » en route', () => {
     commencerReponse('$d1');
     rater('$d1', 'reseau');
     expect(reponseParties(etatReponse('$d1'))).toBe(false);
-    expect(messageEchec('reseau')).toBe('Pas de connexion. Réessaie.');
-    expect(messageEchec('probleme')).toBe('Un problème est survenu. Réessaie.');
+    expect(messageEchec('reseau')).toBe('Pas de réseau. Réessaie.');
+    expect(messageEchec('probleme')).toBe('Ça n’a pas marché. Réessaie.');
     expect(commencerReponse('$d1')).toBe(true);
     expect(etatReponse('$d1')).toBe('envoi');
   });

@@ -30,12 +30,12 @@ describe('ReponseOuiNon', () => {
     render(
       <ReponseOuiNon
         {...proprietes}
-        erreur="Pas de connexion. Réessaie."
+        erreur="Pas de réseau. Réessaie."
         onOui={vi.fn()}
         onNon={vi.fn()}
       />,
     );
-    expect(screen.getByText('Pas de connexion. Réessaie.')).toBeInTheDocument();
+    expect(screen.getByText('Pas de réseau. Réessaie.')).toBeInTheDocument();
     expect(screen.queryByText("D'accord ?")).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Oui' })).toBeEnabled();
   });

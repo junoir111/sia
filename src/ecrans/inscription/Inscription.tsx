@@ -53,12 +53,12 @@ const REPONSES_SERVEUR: Record<ErreurInscription, Reponse> = {
     champ: 'codeSecret',
     message: 'Le serveur refuse ce code. Essaies-en un autre.',
   },
-  reseau: { bandeau: true, message: 'Pas de connexion. Réessaie dans un instant.' },
+  reseau: { bandeau: true, message: 'Pas de réseau. Réessaie dans un instant.' },
   'trop-de-demandes': {
     bandeau: true,
     message: 'Trop d’essais en même temps. Attends quelques secondes et réessaie.',
   },
-  inconnue: { bandeau: true, message: 'Un problème est survenu. Réessaie.' },
+  inconnue: { bandeau: true, message: 'Ça n’a pas marché. Réessaie.' },
 };
 
 /** E3 Créer mon compte. */
@@ -103,7 +103,7 @@ export function Inscription() {
       } catch {
         // Compte créé mais téléphone incapable de garder la session : on le dit au lieu de rester bloqué.
         setEnvoiEnCours(false);
-        setBandeau('Ton compte est créé, mais le téléphone refuse de le garder. Connecte-toi.');
+        setBandeau('Ton compte est créé, mais le téléphone n’a pas pu le garder. Connecte-toi.');
         return;
       }
       // Le code choisi ici est à la fois le mot de passe du compte et le verrou de l'appli : on le pose tout

@@ -328,7 +328,7 @@ describe('Écrans du Mur', () => {
     it('sans réseau : bandeau qui dit quoi faire', () => {
       vi.mocked(useMatrix).mockReturnValue({ client: null, etat: 'erreur-reseau' });
       afficher(CHEMINS.mur);
-      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
     });
 
     describe('liste vivante', () => {
@@ -501,7 +501,7 @@ describe('Écrans du Mur', () => {
       );
       afficher(cheminFichePrestataire('$p1', 'Plombier'));
       fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(screen.getByRole('heading', { name: 'mangue-douce' })).toBeInTheDocument();
     });
 
@@ -544,7 +544,7 @@ describe('Écrans du Mur', () => {
         expect(screen.getByRole('button', { name: 'Demande envoyée…' })).toBeDisabled();
 
         await act(async () => serveur.rejeter(coupureReseau()));
-        expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
         expect(screen.getByRole('button', { name: 'Demander' })).toBeEnabled();
         expect(screen.queryByRole('button', { name: 'Demande envoyée…' })).not.toBeInTheDocument();
 
@@ -560,7 +560,7 @@ describe('Écrans du Mur', () => {
         vi.mocked(demanderA).mockRejectedValue(new Error('Prestataire indisponible.'));
         afficher(cheminFichePrestataire('$p1', 'Plombier'));
         fireEvent.click(await screen.findByRole('button', { name: 'Demander' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent('Un problème est survenu.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Ça n’a pas marché.');
         expect(screen.getByRole('button', { name: 'Demander' })).toBeEnabled();
       });
 
@@ -655,7 +655,7 @@ describe('Écrans du Mur', () => {
         afficher(cheminFicheDemande('$d1', 'Plombier', 'Akanda'));
         fireEvent.click(await screen.findByRole('button', { name: "D'accord ?" }));
         await act(async () => serveur.rejeter(coupureReseau()));
-        expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
         expect(screen.getByRole('button', { name: "D'accord ?" })).toBeEnabled();
         expect(screen.queryByRole('button', { name: 'Réponse envoyée…' })).not.toBeInTheDocument();
       });

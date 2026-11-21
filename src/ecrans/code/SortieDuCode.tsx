@@ -45,7 +45,7 @@ export function SortieDuCode({ mode, ouverte, onOuvrir, onFermer }: Proprietes) 
       if (lireSession() !== null) throw new Error('session toujours présente');
       navigate(CHEMINS.accueil, { replace: true });
     } catch {
-      setErreur('Impossible de te déconnecter pour le moment. Réessaie.');
+      setErreur('La déconnexion n’a pas marché. Réessaie.');
       setEnCours(false);
     }
   }

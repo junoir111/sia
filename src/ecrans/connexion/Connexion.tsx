@@ -17,10 +17,10 @@ import './connexion.css';
 
 const MESSAGES = {
   identifiants: 'Identifiant ou code incorrect.',
-  reseau: 'Pas de connexion. Réessaie dans un instant.',
+  reseau: 'Pas de réseau. Réessaie dans un instant.',
   'trop-de-demandes': 'Trop d’essais en même temps. Attends quelques secondes et réessaie.',
-  inconnue: 'Un problème est survenu. Réessaie.',
-  stockage: 'Le téléphone refuse de garder ta connexion. Réessaie.',
+  inconnue: 'Ça n’a pas marché. Réessaie.',
+  stockage: 'Le téléphone n’a pas pu garder ta connexion. Réessaie.',
 } as const;
 
 /** E2 Se connecter (même style que E3). Le code à 4 chiffres est le mot de passe du compte. */

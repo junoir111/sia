@@ -84,7 +84,7 @@ describe('Écran Se connecter (E2)', () => {
     remplir();
     fireEvent.click(bouton());
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
   });
 
@@ -94,7 +94,7 @@ describe('Écran Se connecter (E2)', () => {
     afficher();
     remplir();
     fireEvent.click(bouton());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
     fireEvent.click(bouton());
     expect(await screen.findByText('profil client')).toBeInTheDocument();
     expect(connecter).toHaveBeenCalledTimes(1);

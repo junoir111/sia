@@ -83,7 +83,7 @@ describe('Écran Créer mon compte (E3)', () => {
     remplir('PALMIER-48');
     fireEvent.click(bouton());
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
   });
 

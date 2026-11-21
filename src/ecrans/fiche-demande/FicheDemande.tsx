@@ -14,8 +14,8 @@ import { useMoi } from '../mur/useMoi';
 import { useMur } from '../mur/useMur';
 import '../fiche-prestataire/fiche-prestataire.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
+const PROBLEME = 'Ça n’a pas marché. Réessaie.';
 
 /** E9 bis Fiche d'une demande (vue d'un prestataire) : le détail, et « D'accord ? ». */
 export function FicheDemande() {

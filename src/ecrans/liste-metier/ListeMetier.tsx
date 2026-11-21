@@ -14,7 +14,7 @@ import { useMur } from '../mur/useMur';
 import { useRattrapage } from '../mur/useRattrapage';
 import './liste-metier.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
 
 /** E8 Liste d'un métier : prestataires disponibles. */
 export function ListeMetier() {

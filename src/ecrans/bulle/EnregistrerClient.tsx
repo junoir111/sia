@@ -9,8 +9,8 @@ import { useClients } from '../clients/useClients';
 import { useMoi } from '../mur/useMoi';
 import { familleErreur } from '../profil-client/branchements';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
+const PROBLEME = 'Ça n’a pas marché. Réessaie.';
 
 type Proprietes = { client: MatrixClient; roomId: string };
 

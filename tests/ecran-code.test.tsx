@@ -104,7 +104,7 @@ describe('Écran du code — taper son code', () => {
     afficher('taper');
     taper('4821');
     expect(
-      await screen.findByText('Impossible de vérifier le code. Réessaie.'),
+      await screen.findByText('Le code n’a pas pu être vérifié. Réessaie.'),
     ).toBeInTheDocument();
     await waitFor(() => expect(ronds('0 chiffre sur 4')).toBeInTheDocument());
     taper('1');
@@ -186,7 +186,7 @@ describe('Écran du code — choisir son code', () => {
     taper('4821');
     taper('4821');
     expect(
-      await screen.findByText('Ce téléphone ne peut pas garder le code. Réessaie.'),
+      await screen.findByText('Le téléphone n’a pas pu garder le code. Réessaie.'),
     ).toBeInTheDocument();
   });
 });
@@ -214,7 +214,7 @@ describe('Écran du code — sortie', () => {
       within(screen.getByRole('dialog')).getByRole('button', { name: 'Se déconnecter' }),
     );
     expect(
-      await screen.findByText('Impossible de te déconnecter pour le moment. Réessaie.'),
+      await screen.findByText('La déconnexion n’a pas marché. Réessaie.'),
     ).toBeInTheDocument();
     expect(deconnecter).toHaveBeenCalledWith(SESSION);
     expect(screen.queryByText('écran accueil')).not.toBeInTheDocument();
@@ -238,7 +238,7 @@ describe('Écran du code — sortie', () => {
       within(screen.getByRole('dialog')).getByRole('button', { name: 'Se déconnecter' }),
     );
     expect(
-      await screen.findByText('Impossible de te déconnecter pour le moment. Réessaie.'),
+      await screen.findByText('La déconnexion n’a pas marché. Réessaie.'),
     ).toBeInTheDocument();
     expect(screen.queryByText('écran accueil')).not.toBeInTheDocument();
   });

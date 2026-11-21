@@ -234,7 +234,7 @@ describe('Écran Profil prestataire (E5)', () => {
     remplir();
     fireEvent.click(boutonSia());
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
     expect(ecrireDisponible).not.toHaveBeenCalled();
@@ -295,7 +295,7 @@ describe('Écran Profil prestataire (E5)', () => {
     await attendreChargement();
     remplir();
     fireEvent.click(boutonSia());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
     expect(ecrireDisponible).not.toHaveBeenCalled();
   });
@@ -365,7 +365,7 @@ describe('Écran Profil prestataire (E5)', () => {
 
       await act(async () => serveur.resoudre({ ok: false, erreur: 'reseau' }));
       expect(await screen.findByRole('alert')).toHaveTextContent(
-        'Pas de connexion. Réessaie dans un instant.',
+        'Pas de réseau. Réessaie dans un instant.',
       );
       expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
       // Le formulaire est rendu tel qu'il était ; SIA est gris et prêt pour un nouvel essai.
@@ -384,7 +384,7 @@ describe('Écran Profil prestataire (E5)', () => {
       remplir();
       act(() =>
         deposerEchec({
-          message: 'Pas de connexion. Réessaie dans un instant.',
+          message: 'Pas de réseau. Réessaie dans un instant.',
           saisie: {
             pseudo: 'mangue-douce',
             metier: 'Maçon',
@@ -400,7 +400,7 @@ describe('Écran Profil prestataire (E5)', () => {
       );
 
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Pas de connexion. Réessaie dans un instant.',
+        'Pas de réseau. Réessaie dans un instant.',
       );
       expect(screen.getByText('Maçon')).toBeInTheDocument();
       expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Owendo');
@@ -421,7 +421,7 @@ describe('Écran Profil prestataire (E5)', () => {
       await waitFor(() => expect(publierStatut).toHaveBeenCalled());
 
       await act(async () => serveur.rejeter(coupureReseau()));
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
       expect(ecrireDisponible).not.toHaveBeenCalled();
 
@@ -468,7 +468,7 @@ describe('Écran Profil prestataire (E5)', () => {
       await act(async () => serveur.rejeter(coupureReseau()));
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText('Tu es visible à Owendo.')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(ecrireDisponible).not.toHaveBeenCalled();
     });
 
@@ -494,7 +494,7 @@ describe('Écran Profil prestataire (E5)', () => {
       expect(await screen.findByText('Touche SIA pour enregistrer.')).toBeInTheDocument();
       expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Akanda');
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
     });
 
     it('le refus n’est jamais perdu : même passé aux bulles, on est ramené au profil', async () => {
@@ -508,7 +508,7 @@ describe('Écran Profil prestataire (E5)', () => {
       expect(screen.getByText('écran bulles')).toBeInTheDocument();
 
       await act(async () => serveur.resoudre({ ok: false, erreur: 'reseau' }));
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(screen.queryByText('écran bulles')).not.toBeInTheDocument();
     });
 
@@ -520,7 +520,7 @@ describe('Écran Profil prestataire (E5)', () => {
       await attendreChargement();
       remplir();
       fireEvent.click(boutonSia());
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       await waitFor(() => expect(boutonSia()).toBeEnabled());
 
       // Deuxième essai : ça passe. Un retour arrière rouvre le profil, sans le vieux message.

@@ -154,7 +154,7 @@ describe('Écran Bulles (M3)', () => {
   it('pas de réseau au démarrage : bandeau', () => {
     vi.mocked(useMatrix).mockReturnValue({ client: null, etat: 'erreur-reseau' });
     afficher();
-    expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
   });
 
   it('flèche retour : le Mur', () => {
@@ -223,7 +223,7 @@ describe('Écran Bulles (M3)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Oui' }));
       await act(async () => serveur.rejeter(coupureReseau()));
 
-      expect(screen.getByText('Pas de connexion. Réessaie.')).toBeInTheDocument();
+      expect(screen.getByText('Pas de réseau. Réessaie.')).toBeInTheDocument();
       expect(screen.queryByText('Réponse envoyée…')).not.toBeInTheDocument();
       expect(screen.queryByText('écran bulle')).not.toBeInTheDocument();
 
@@ -238,7 +238,7 @@ describe('Écran Bulles (M3)', () => {
       afficher();
       fireEvent.click(screen.getByRole('button', { name: /mangue/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Non' }));
-      expect(await screen.findByText('Un problème est survenu. Réessaie.')).toBeInTheDocument();
+      expect(await screen.findByText('Ça n’a pas marché. Réessaie.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Non' })).toBeInTheDocument();
     });
 

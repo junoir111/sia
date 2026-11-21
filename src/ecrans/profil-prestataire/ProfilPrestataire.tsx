@@ -51,8 +51,8 @@ const NB_LIGNES_SERVICE = 2;
 const LIGNES_VIDES = Array.from({ length: NB_LIGNES_SERVICE }, () => ({ label: '', prix: '' }));
 
 const MESSAGES: Record<Exclude<ErreurProfil, 'session'>, string> = {
-  reseau: 'Pas de connexion. Réessaie dans un instant.',
-  inconnue: 'Un problème est survenu. Réessaie.',
+  reseau: 'Pas de réseau. Réessaie dans un instant.',
+  inconnue: 'Ça n’a pas marché. Réessaie.',
 };
 
 function saisieDepuis(profil: Profil): SaisieProfil {

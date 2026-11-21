@@ -331,7 +331,7 @@ describe('Écran Bulle (M4)', () => {
     afficher();
     fireEvent.change(champ(), { target: { value: 'Allô' } });
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
     expect(champ()).toHaveValue('Allô');
   });
 

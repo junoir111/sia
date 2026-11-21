@@ -21,7 +21,7 @@ import { useRattrapage } from './useRattrapage';
 import { effacerPosition, lirePosition, memoriserPosition } from './position-mur';
 import './mur.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
 const LONGUEUR_MAX_RECHERCHE = 40;
 
 /** E7 Le Mur (modèle 1 « grille des métiers »). */

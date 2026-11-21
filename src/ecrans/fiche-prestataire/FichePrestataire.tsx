@@ -14,8 +14,8 @@ import { useMoi } from '../mur/useMoi';
 import { useMur } from '../mur/useMur';
 import './fiche-prestataire.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
-const PROBLEME = 'Un problème est survenu. Réessaie.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
+const PROBLEME = 'Ça n’a pas marché. Réessaie.';
 
 /** E9 Fiche d'un prestataire : qui il est, ses prix indicatifs, et « Demander ». */
 export function FichePrestataire() {

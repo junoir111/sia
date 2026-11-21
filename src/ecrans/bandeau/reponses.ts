@@ -19,8 +19,8 @@ export type EtatReponse = 'repos' | 'envoi' | 'fait' | 'reseau' | 'probleme';
 const NOMBRE_MAX = 50;
 
 const MESSAGES_ECHEC = {
-  reseau: 'Pas de connexion. Réessaie.',
-  probleme: 'Un problème est survenu. Réessaie.',
+  reseau: 'Pas de réseau. Réessaie.',
+  probleme: 'Ça n’a pas marché. Réessaie.',
 } as const;
 
 const etats = new Map<string, EtatReponse>();

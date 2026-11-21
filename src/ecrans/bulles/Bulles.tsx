@@ -27,7 +27,7 @@ import { familleErreur } from '../profil-client/branchements';
 import { useBulles } from './useBulles';
 import './bulles.css';
 
-const PAS_DE_RESEAU = 'Pas de connexion. Réessaie dans un instant.';
+const PAS_DE_RESEAU = 'Pas de réseau. Réessaie dans un instant.';
 
 /** Petit texte d'état à droite de la ligne, et sa couleur. */
 function etatLigne(b: ResumeBulle): { texte: string; vif: boolean } {

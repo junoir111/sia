@@ -198,7 +198,7 @@ describe('Écran Page client (E6)', () => {
     afficher();
     remplir();
     fireEvent.click(boutonSia());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
     expect(publierDemande).not.toHaveBeenCalled();
   });
 
@@ -245,7 +245,7 @@ describe('Écran Page client (E6)', () => {
     remplir();
     fireEvent.click(boutonSia());
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Pas de connexion. Réessaie dans un instant.',
+      'Pas de réseau. Réessaie dans un instant.',
     );
     expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
   });
@@ -392,7 +392,7 @@ describe('Écran Page client (E6)', () => {
 
       await act(async () => serveur.rejeter(coupureReseau()));
       expect(await screen.findByRole('alert')).toHaveTextContent(
-        'Pas de connexion. Réessaie dans un instant.',
+        'Pas de réseau. Réessaie dans un instant.',
       );
       expect(screen.queryByText('écran mur')).not.toBeInTheDocument();
       // Le formulaire est rendu tel qu'il était ; SIA est gris et prêt pour un nouvel essai.
@@ -418,7 +418,7 @@ describe('Écran Page client (E6)', () => {
       remplir();
       fireEvent.click(boutonSia());
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       // La page rouverte relit le profil sur le serveur : ce qui était tapé doit rester.
       await act(async () => undefined);
       expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Akanda');
@@ -430,7 +430,7 @@ describe('Écran Page client (E6)', () => {
       remplir();
       act(() =>
         deposerEchec({
-          message: 'Pas de connexion. Réessaie dans un instant.',
+          message: 'Pas de réseau. Réessaie dans un instant.',
           saisie: {
             pseudo: 'palmier-48',
             zone: 'Owendo',
@@ -442,7 +442,7 @@ describe('Écran Page client (E6)', () => {
       );
 
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Pas de connexion. Réessaie dans un instant.',
+        'Pas de réseau. Réessaie dans un instant.',
       );
       expect(screen.getByRole('combobox', { name: 'Quartier' })).toHaveValue('Owendo');
       expect(screen.getByLabelText('De quoi as-tu besoin ?')).toHaveValue('Coiffure');
@@ -479,7 +479,7 @@ describe('Écran Page client (E6)', () => {
       await act(async () => serveur.rejeter(coupureReseau()));
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText('Ta demande est partie.')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(screen.getByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(localStorage.getItem('sia.demande')).not.toBeNull();
     });
 
@@ -495,7 +495,7 @@ describe('Écran Page client (E6)', () => {
 
       await act(async () => serveur.rejeter(coupureReseau()));
       // L'ancienne demande a bien été retirée avant l'échec : le bouton est gris, la nouvelle demande reste à envoyer.
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'false');
       expect(boutonSia()).toBeEnabled();
       expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('8000');
@@ -510,7 +510,7 @@ describe('Écran Page client (E6)', () => {
       fireEvent.change(screen.getByLabelText('Ton budget, en FCFA'), { target: { value: '8000' } });
       fireEvent.click(boutonSia());
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(screen.getByText('Touche SIA pour envoyer ta nouvelle demande.')).toBeInTheDocument();
       expect(boutonSia()).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByLabelText('Ton budget, en FCFA')).toHaveValue('8000');
@@ -528,7 +528,7 @@ describe('Écran Page client (E6)', () => {
       expect(screen.getByText('écran bulles')).toBeInTheDocument();
 
       await act(async () => serveur.rejeter(coupureReseau()));
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de connexion.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Pas de réseau.');
       expect(screen.queryByText('écran bulles')).not.toBeInTheDocument();
     });
 
