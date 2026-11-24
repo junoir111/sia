@@ -1,4 +1,4 @@
-# SIA - fabrique l'APK d'essai (debug, NON signé). Aucune clé ici : la signature se fait sur le PC de l'utilisateur.
+# SIA - fabrique l'APK (NON signé) : essai = version finale (release, NON débogable) ; test = version de débogage. Aucune clé ici : la signature se fait sur le PC de l'utilisateur.
 # Déclenché par une étiquette essai-AAAAMMJJ-HHMM (APK normal) ou test-AAAAMMJJ-HHMM (variante TEST :
 # captures et débogage WebView permis, même identifiant et même nom de fichier).
 name: sia-apk
@@ -26,19 +26,23 @@ jobs:
       - run: npm ci
       - run: npm run verifier
       - run: npm run android
-      - name: Fabriquer l'APK debug
+      - name: Fabriquer l'APK
         working-directory: android
         env:
           ETIQUETTE: ${{ github.ref_name }}
         run: |
           if [[ "$ETIQUETTE" == test-* ]]; then
             ./gradlew --no-daemon assembleDebug -PsiaTest=true
+            cp app/build/outputs/apk/debug/app-debug.apk sia-non-signe.apk
           else
-            ./gradlew --no-daemon assembleDebug
+            # Version donnée aux amis : release = pas débogable (ni adb run-as, ni inspection du WebView).
+            ./gradlew --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/app-release-unsigned.apk sia-non-signe.apk
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: sia-apk-non-signe
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/sia-non-signe.apk
           if-no-files-found: error
-          retention-days: 14
+          # La variante test (captures + débogage) ne reste qu'un jour : le dépôt est public.
+          retention-days: ${{ startsWith(github.ref_name, 'test-') && 1 || 14 }}
